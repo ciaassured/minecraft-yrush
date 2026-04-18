@@ -93,7 +93,8 @@ Death elimination: always on
 Timeout result: draw
 All players dead/quit result: draw
 Start weighting: prefer surface starts 70% of rounds and underground starts 30% of rounds
-Underground start item: give each player one stone pickaxe for that round only
+Underground start item: give each player one wooden pickaxe for that round only
+Recent start memory: avoid repeating the same broad start category and avoid back-to-back water starts when possible
 ```
 
 ## Game Flow
@@ -103,7 +104,7 @@ Single round flow:
 ```text
 1. A player runs /yrush start.
 2. Eligible players are gathered.
-3. Players are reset and sent to the lobby/spawn.
+3. Players are registered for the round; they are expected to already be at the lobby from the previous round or server setup.
 4. The lobby countdown begins.
 5. During countdown, prepare:
    - random safe start location
@@ -139,6 +140,8 @@ Rules:
 - Target Y must be at least `target-y.minimum-distance` blocks away from start Y.
 - Target Y must be no more than `target-y.maximum-distance` blocks away from start Y.
 - Target Y may be above or below the start.
+- Water starts must use a downward target because players may have no blocks/resources for climbing.
+- If a candidate water start cannot produce a valid downward target, reject that candidate and search for another start.
 - If a valid target cannot be selected, fail the round setup cleanly.
 
 Direction and win logic:
@@ -163,6 +166,8 @@ V1 requirements:
 
 - Starts may be above ground or underground.
 - Start selection should prefer surface starts 70% of rounds and underground starts 30% of rounds.
+- Track broad recent start categories: surface dry, surface water, underground dry, underground water.
+- Avoid repeating the previous broad start category and avoid back-to-back water starts where possible, but fall back to any safe start rather than failing the round.
 - Water starts are allowed.
 - Lava starts are not allowed.
 - Players must not spawn inside solid blocks.
@@ -197,7 +202,12 @@ Do not implement biome preference in V1.
 
 ## Player State Rules
 
-Before a round starts:
+When a round is being prepared:
+
+- Store each participant's original game mode.
+- Do not reset health, hunger, or inventory yet.
+
+When players teleport to the random start and the round begins:
 
 - Clear inventory.
 - Clear armor and offhand.
@@ -207,13 +217,13 @@ Before a round starts:
 - Reset fire ticks.
 - Reset fall distance.
 - Reset air supply.
-- Store each participant's original game mode.
-- Teleport players to lobby for countdown.
 
 During a round:
 
 - Players race with empty inventories.
-- If the round starts underground, each player gets one stone pickaxe.
+- If the target direction is down, the round starts underground, or the round starts at night, each player gets night vision for the round.
+- If the round starts underground, each player gets one wooden pickaxe.
+- The underground pickaxe is intentionally wooden: it prevents sealed underground starts from bricking the round, but mining stays slower than running when a natural route downward exists.
 - Players may break/place blocks normally.
 - World changes remain between rounds.
 
