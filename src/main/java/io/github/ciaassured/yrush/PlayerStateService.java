@@ -8,6 +8,7 @@ import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 public final class PlayerStateService {
     public void resetForRound(Player player) {
@@ -17,6 +18,11 @@ public final class PlayerStateService {
 
     public void giveUndergroundStartItems(Player player) {
         player.getInventory().addItem(new ItemStack(Material.WOODEN_PICKAXE));
+    }
+
+    public void giveDigDownVision(Player player, int timeoutSeconds) {
+        int durationTicks = Math.max(20, timeoutSeconds * 20);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, durationTicks, 0, false, false, true));
     }
 
     public void restoreAfterRound(Player player, GameMode originalGameMode, Location lobby) {

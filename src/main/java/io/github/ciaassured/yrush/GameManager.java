@@ -147,8 +147,6 @@ public final class GameManager implements Listener {
             activePlayers.add(player.getUniqueId());
             originalGameModes.putIfAbsent(player.getUniqueId(), player.getGameMode());
             player.setGameMode(GameMode.SURVIVAL);
-            playerStateService.resetForRound(player);
-            player.teleport(lobby);
         }
 
         Optional<RoundContext> preparedRound = prepareRound(lobby, config, eligiblePlayers.size());
@@ -245,6 +243,10 @@ public final class GameManager implements Listener {
         for (int i = 0; i < players.size(); i++) {
             Player player = players.get(i);
             player.teleport(starts.get(i % starts.size()));
+            playerStateService.resetForRound(player);
+            if (shouldGiveNightVision(context)) {
+                playerStateService.giveDigDownVision(player, context.timeoutSeconds());
+            }
             if (context.startType() == StartType.UNDERGROUND) {
                 playerStateService.giveUndergroundStartItems(player);
             }
@@ -265,6 +267,16 @@ public final class GameManager implements Listener {
         state = GameState.ACTIVE;
         messages.roundStart(players, context);
         startActiveTasks();
+    }
+
+    private boolean shouldGiveNightVision(RoundContext roundContext) {
+        World world = roundContext.startCenter().getWorld();
+        long time = world == null ? 0L : world.getTime();
+        boolean isNight = time >= 12542L && time <= 23459L;
+
+        return roundContext.direction() == RoundDirection.DOWN
+            || roundContext.startType() == StartType.UNDERGROUND
+            || isNight;
     }
 
     private void startActiveTasks() {
