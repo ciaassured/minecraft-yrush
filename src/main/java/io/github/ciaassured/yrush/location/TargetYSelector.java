@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.location;
 
 import org.bukkit.World;
 
@@ -44,9 +44,7 @@ public final class TargetYSelector {
             }
         }
 
-        if (ranges.isEmpty()) {
-            return OptionalInt.empty();
-        }
+        if (ranges.isEmpty()) return OptionalInt.empty();
 
         int totalValues = ranges.stream().mapToInt(Range::size).sum();
         int selected = random.nextInt(totalValues);

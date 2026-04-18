@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.location;
 
 public enum StartType {
     SURFACE,

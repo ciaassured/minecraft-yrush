@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.location;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -35,56 +35,43 @@ public final class SafeLocationValidator {
 
     public boolean isSafe(Location location) {
         World world = location.getWorld();
-        if (world == null) {
-            return false;
-        }
+        if (world == null) return false;
 
+        int x = location.getBlockX();
         int y = location.getBlockY();
-        if (y <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) {
-            return false;
-        }
+        int z = location.getBlockZ();
 
-        Block feet = world.getBlockAt(location.getBlockX(), y, location.getBlockZ());
-        Block head = world.getBlockAt(location.getBlockX(), y + 1, location.getBlockZ());
-        Block below = world.getBlockAt(location.getBlockX(), y - 1, location.getBlockZ());
+        if (y <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) return false;
 
-        if (!isPlayerSpace(feet.getType()) || !isPlayerSpace(head.getType())) {
-            return false;
-        }
+        Block feet  = world.getBlockAt(x, y,     z);
+        Block head  = world.getBlockAt(x, y + 1, z);
+        Block below = world.getBlockAt(x, y - 1, z);
 
-        if (!isSafeSupport(below.getType())) {
-            return false;
-        }
+        if (!isPlayerSpace(feet.getType()) || !isPlayerSpace(head.getType())) return false;
+        if (!isSafeSupport(below.getType())) return false;
 
-        return hasSafeImmediateArea(world, location.getBlockX(), y, location.getBlockZ());
+        return hasSafeImmediateArea(world, x, y, z);
     }
 
     private boolean isPlayerSpace(Material material) {
-        if (material == Material.WATER) {
-            return true;
-        }
-        if (DANGEROUS.contains(material) || INVALID.contains(material)) {
-            return false;
-        }
+        if (material == Material.WATER) return true;
+        if (DANGEROUS.contains(material) || INVALID.contains(material)) return false;
         return material.isAir() || !material.isSolid();
     }
 
     private boolean isSafeSupport(Material material) {
-        if (material == Material.WATER) {
-            return true;
-        }
-        if (DANGEROUS.contains(material) || INVALID.contains(material)) {
-            return false;
-        }
+        if (material == Material.WATER) return true;
+        if (DANGEROUS.contains(material) || INVALID.contains(material)) return false;
         return material.isSolid();
     }
 
     private boolean hasSafeImmediateArea(World world, int x, int y, int z) {
+        // Check from y-1 (below feet) to y+2 (one block above head) to catch hazards
+        // like lava flowing from above. Player occupies y and y+1.
         for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
+            for (int dy = -1; dy <= 2; dy++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    Material material = world.getBlockAt(x + dx, y + dy, z + dz).getType();
-                    if (DANGEROUS.contains(material)) {
+                    if (DANGEROUS.contains(world.getBlockAt(x + dx, y + dy, z + dz).getType())) {
                         return false;
                     }
                 }
@@ -93,4 +80,3 @@ public final class SafeLocationValidator {
         return true;
     }
 }
-

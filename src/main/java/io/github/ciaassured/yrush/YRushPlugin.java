@@ -1,33 +1,34 @@
 package io.github.ciaassured.yrush;
 
+import io.github.ciaassured.yrush.command.YRushCommand;
+import io.github.ciaassured.yrush.game.GameController;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class YRushPlugin extends JavaPlugin {
-    private GameManager gameManager;
+    private GameController gameController;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        gameController = new GameController(this);
 
-        gameManager = new GameManager(this);
-        YRushCommand command = new YRushCommand(gameManager);
-
-        PluginCommand yrushCommand = getCommand("yrush");
-        if (yrushCommand == null) {
+        PluginCommand command = getCommand("yrush");
+        if (command == null) {
             throw new IllegalStateException("Command 'yrush' is missing from plugin.yml");
         }
-        yrushCommand.setExecutor(command);
-        yrushCommand.setTabCompleter(command);
+        YRushCommand executor = new YRushCommand(gameController);
+        command.setExecutor(executor);
+        command.setTabCompleter(executor);
 
-        getServer().getPluginManager().registerEvents(gameManager, this);
+        getServer().getPluginManager().registerEvents(gameController, this);
         getLogger().info("YRush enabled.");
     }
 
     @Override
     public void onDisable() {
-        if (gameManager != null) {
-            gameManager.shutdown();
+        if (gameController != null) {
+            gameController.shutdown();
         }
     }
 }
