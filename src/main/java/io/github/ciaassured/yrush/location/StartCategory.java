@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.location;
 
 public enum StartCategory {
     SURFACE_DRY,
@@ -17,4 +17,3 @@ public enum StartCategory {
         return this == SURFACE_WATER || this == UNDERGROUND_WATER;
     }
 }
-

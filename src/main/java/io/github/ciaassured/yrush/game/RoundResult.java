@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.game;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -11,8 +11,7 @@ public record RoundResult(
     Duration duration,
     int participantCount
 ) {
-    public static RoundResult stopped(int participantCount) {
-        return new RoundResult(RoundResultType.STOPPED, Optional.empty(), 0, Duration.ZERO, participantCount);
+    public static RoundResult stopped() {
+        return new RoundResult(RoundResultType.STOPPED, Optional.empty(), 0, Duration.ZERO, 0);
     }
 }
-

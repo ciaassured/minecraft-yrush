@@ -1,5 +1,7 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.game;
 
+import io.github.ciaassured.yrush.location.StartCategory;
+import io.github.ciaassured.yrush.location.StartType;
 import org.bukkit.Location;
 
 import java.time.Instant;
@@ -24,8 +26,12 @@ public record RoundContext(
         if (startedAt == null) {
             return timeoutSeconds;
         }
-
         long elapsed = Math.max(0, now.getEpochSecond() - startedAt.getEpochSecond());
         return Math.max(0, timeoutSeconds - elapsed);
+    }
+
+    RoundContext withStartedAt(Instant started) {
+        return new RoundContext(startCenter, playerStarts, startType, startCategory,
+            startY, targetY, direction, timeoutSeconds, started);
     }
 }

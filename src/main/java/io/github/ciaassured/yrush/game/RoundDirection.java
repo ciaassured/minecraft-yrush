@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.game;
 
 public enum RoundDirection {
     UP("CLIMB TO", "Climb"),
@@ -20,4 +20,3 @@ public enum RoundDirection {
         return label;
     }
 }
-

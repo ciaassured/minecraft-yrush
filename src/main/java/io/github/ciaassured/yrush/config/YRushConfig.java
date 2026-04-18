@@ -1,4 +1,4 @@
-package io.github.ciaassured.yrush;
+package io.github.ciaassured.yrush.config;
 
 import org.bukkit.configuration.file.FileConfiguration;
 
@@ -24,4 +24,3 @@ public record YRushConfig(
         );
     }
 }
-
