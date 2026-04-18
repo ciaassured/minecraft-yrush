@@ -105,11 +105,11 @@ Single round flow:
 1. A player runs /yrush start.
 2. Eligible players are gathered.
 3. Players are registered for the round; they are expected to already be at the lobby from the previous round or server setup.
-4. The lobby countdown begins.
-5. During countdown, prepare:
+4. Round preparation begins:
    - random safe start location
    - nearby safe player spawn positions
    - random target Y
+5. The lobby countdown begins after preparation succeeds.
 6. At zero:
    - teleport players to the random start
    - immediately announce the target Y
@@ -288,48 +288,74 @@ DIG DOWN TO Y -32
 During active rounds, show an actionbar with compact live stats, for example:
 
 ```text
-DIG DOWN TO Y -32 | Active 4/7 | 08:42
-CLIMB TO Y 180 | Active 4/7 | 08:42
+DIG DOWN TO Y -32 | Away 18 | Active 4/7 | 08:42
+CLIMB TO Y 180 | Away 27 | Active 4/7 | 08:42
 ```
 
 The actionbar should include:
 
 - Direction
 - Target Y
+- Blocks away from the target for that player
 - Active players remaining
 - Time remaining
 
-## State Management
+## Architecture And State Management
 
-Use an explicit game state model. Suggested states:
+The project has been refactored around explicit object ownership and separation of concerns. Preserve this structure when making changes.
 
-```text
-IDLE
-COUNTDOWN
-ACTIVE
-BETWEEN_ROUNDS
-STOPPING
-```
-
-Be strict about task cancellation. `/yrush stop`, plugin disable, timeout, win, and draw should not leave scheduled countdown, actionbar, win-check, timeout, or auto-loop tasks running.
-
-Suggested implementation components:
+Current package responsibilities:
 
 ```text
-YRushPlugin
-GameManager
-YRushCommand
-GameState enum
-RoundContext
-RoundResult
-StartLocationService
-SafeLocationValidator
-TargetYSelector
-PlayerStateService
-MessageService
+io.github.ciaassured.yrush
+  YRushPlugin                 Bukkit plugin entrypoint only
+
+command/
+  YRushCommand                command parsing, permissions, tab completion
+
+config/
+  YRushConfig                 config parsing, defaults, and value coercion
+
+game/
+  GameController              high-level orchestration, auto mode, lobby, status
+  Round                       owns one complete round lifecycle
+  RoundCompletionHandler      callback from Round to GameController
+  RoundContext                immutable round setup/runtime context
+  RoundResult                 round completion result model
+  RoundDirection              target direction model
+  RoundResultType             result type model
+
+location/
+  StartLocationService        async start search and chunk preparation
+  SafeLocationValidator       safe block/material checks
+  TargetYSelector             target Y selection rules
+  StartLocation               start result model
+  StartCategory               broad start category model
+  StartType                   surface/underground model
+  TargetDirectionPreference   target direction preference model
+
+service/
+  MessageService              stateless message/title/actionbar helpers
+  PlayerStateService          stateless player reset/restore helpers
 ```
 
-The exact class layout may change to fit the codebase, but keep responsibilities separated.
+Lifecycle responsibilities:
+
+- `YRushPlugin` should only wire Bukkit lifecycle concerns: config defaults, command registration, listener registration, and shutdown delegation.
+- `YRushCommand` should only parse and dispatch `/yrush` subcommands. Do not put game rules or round state there.
+- `GameController` should orchestrate high-level game state: start/stop/status/lobby, auto mode, between-round scheduling, and offline restore handoff.
+- `Round` owns all mutable state for a single round: participants, active/eliminated players, original game modes, preparation, countdown, active tasks, death/quit/join listeners, cleanup, and result emission.
+- `Round` implements `AutoCloseable`; `close()` must stay idempotent and safe from every path: stop command, plugin disable, preparation failure, win, draw, timeout, or all-eliminated draw.
+- `RoundCompletionHandler` is the handoff point from `Round` back to `GameController`.
+- `MessageService` and `PlayerStateService` are intentionally stateless utility services.
+
+State and task rules:
+
+- Avoid shared mutable round state in `GameController`; per-round mutable state belongs in `Round`.
+- Be strict about task cancellation. `/yrush stop`, plugin disable, preparation failure, timeout, win, and draw must not leave scheduled countdown, actionbar, win-check, timeout, preparation, or auto-loop tasks running.
+- Async chunk preparation must use Paper async chunk APIs. Do not reintroduce synchronous chunk loading for random start generation.
+- Async callbacks must guard against stale/disposed rounds before mutating state.
+- Preserve offline restore behavior. If a participant is offline during cleanup, keep their original game mode in `GameController` and restore them on join.
 
 ## Future Features
 
