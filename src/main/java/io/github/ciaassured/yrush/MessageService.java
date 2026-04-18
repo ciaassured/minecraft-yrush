@@ -55,9 +55,10 @@ public final class MessageService {
     public void actionBar(Player player, RoundContext context, int activePlayers, int totalPlayers) {
         long remaining = context.remainingSeconds(java.time.Instant.now());
         String time = "%02d:%02d".formatted(remaining / 60, remaining % 60);
-        String message = "%s Y %d | Active %d/%d | %s".formatted(
+        String message = "%s Y %d | Away %d | Active %d/%d | %s".formatted(
             context.direction().titlePrefix(),
             context.targetY(),
+            blocksAway(player, context),
             activePlayers,
             totalPlayers,
             time
@@ -65,8 +66,15 @@ public final class MessageService {
         player.sendActionBar(component(message, NamedTextColor.AQUA));
     }
 
+    private int blocksAway(Player player, RoundContext context) {
+        double currentY = player.getLocation().getY();
+        double remaining = context.direction() == RoundDirection.UP
+            ? context.targetY() - currentY
+            : currentY - context.targetY();
+        return (int) Math.ceil(Math.max(0.0, remaining));
+    }
+
     public Component component(String message, NamedTextColor color) {
         return Component.text(message, color);
     }
 }
-
