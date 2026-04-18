@@ -67,6 +67,8 @@ fun paperPluginsDir(): File {
     return paperServerDir().resolve("plugins")
 }
 
+fun yrushGeneratedConfigFile(): File = paperPluginsDir().resolve("YRush").resolve("config.yml")
+
 fun paperServerJar(): File {
     val serverDir = paperServerDir()
     val explicit = localProperty("paperServerJar")
@@ -95,11 +97,26 @@ fun paperServerJar(): File {
     }
 }
 
+tasks.register("deleteGeneratedPluginConfig") {
+    group = "deployment"
+    description = "Deletes the generated YRush config so bundled config changes are picked up locally."
+
+    doLast {
+        val configFile = yrushGeneratedConfigFile()
+        if (configFile.isFile) {
+            if (!configFile.delete()) {
+                throw GradleException("Could not delete generated YRush config: ${configFile.absolutePath}")
+            }
+            logger.lifecycle("Deleted generated YRush config: ${configFile.absolutePath}")
+        }
+    }
+}
+
 tasks.register<Copy>("deployPlugin") {
     group = "deployment"
-    description = "Builds YRush and copies the plugin jar to the local Paper plugins folder."
+    description = "Builds YRush, refreshes the generated config, and copies the plugin jar to the local Paper plugins folder."
 
-    dependsOn(tasks.named("build"))
+    dependsOn(tasks.named("build"), tasks.named("deleteGeneratedPluginConfig"))
 
     from(tasks.named<Jar>("jar").flatMap { it.archiveFile })
     into(providers.provider { paperPluginsDir() })
@@ -107,7 +124,9 @@ tasks.register<Copy>("deployPlugin") {
 
 tasks.register<Exec>("runPaperServer") {
     group = "deployment"
-    description = "Starts the configured local Paper server."
+    description = "Refreshes the generated config and starts the configured local Paper server."
+
+    dependsOn(tasks.named("deleteGeneratedPluginConfig"))
 
     standardInput = System.`in`
 
@@ -119,7 +138,7 @@ tasks.register<Exec>("runPaperServer") {
 
 tasks.register("deployAndRun") {
     group = "deployment"
-    description = "Builds YRush, deploys it to the local Paper plugins folder, then starts Paper."
+    description = "Builds YRush, refreshes the generated config, deploys it, then starts Paper."
 
     dependsOn(tasks.named("deployPlugin"))
     finalizedBy(tasks.named("runPaperServer"))
