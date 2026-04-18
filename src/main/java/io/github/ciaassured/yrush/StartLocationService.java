@@ -11,12 +11,15 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 
 public final class StartLocationService {
     private static final int MAX_LOCATION_ATTEMPTS = 150;
+    private static final int MAX_RECENT_CATEGORY_AVOID_ATTEMPTS = 10;
     private static final int PLAYER_SPREAD_RADIUS = 4;
     private static final int PRELOAD_CHUNK_RADIUS = 1;
     private static final int SURFACE_START_PERCENT = 70;
+    private static final boolean GENERATE_MISSING_CHUNKS = true;
 
     private final Random random;
     private final SafeLocationValidator validator;
@@ -27,31 +30,44 @@ public final class StartLocationService {
         this.validator = validator;
     }
 
-    public Optional<StartLocation> findStart(World world, Location center, int radius, int playerCount) {
+    public CompletableFuture<Optional<StartLocation>> findStartAsync(
+        World world,
+        Location center,
+        int radius,
+        int playerCount
+    ) {
         StartType preferredType = random.nextInt(100) < SURFACE_START_PERCENT ? StartType.SURFACE : StartType.UNDERGROUND;
-        Optional<StartLocation> preferredStart = findStart(world, center, radius, playerCount, preferredType);
-        if (preferredStart.isPresent()) {
-            return preferredStart;
-        }
+        return findStartAsync(world, center, radius, playerCount, preferredType).thenCompose(preferredStart -> {
+            if (preferredStart.isPresent()) {
+                return CompletableFuture.completedFuture(preferredStart);
+            }
 
-        StartType fallbackType = preferredType == StartType.SURFACE ? StartType.UNDERGROUND : StartType.SURFACE;
-        return findStart(world, center, radius, playerCount, fallbackType);
+            StartType fallbackType = preferredType == StartType.SURFACE ? StartType.UNDERGROUND : StartType.SURFACE;
+            return findStartAsync(world, center, radius, playerCount, fallbackType);
+        });
     }
 
     public void remember(StartLocation startLocation) {
         lastStartCategory = startLocation.category();
     }
 
-    private Optional<StartLocation> findStart(World world, Location center, int radius, int playerCount, StartType type) {
-        Optional<StartLocation> dryStart = findStart(world, center, radius, playerCount, type, true);
-        if (dryStart.isPresent()) {
-            return dryStart;
-        }
+    private CompletableFuture<Optional<StartLocation>> findStartAsync(
+        World world,
+        Location center,
+        int radius,
+        int playerCount,
+        StartType type
+    ) {
+        return findStartAsync(world, center, radius, playerCount, type, true).thenCompose(dryStart -> {
+            if (dryStart.isPresent()) {
+                return CompletableFuture.completedFuture(dryStart);
+            }
 
-        return findStart(world, center, radius, playerCount, type, false);
+            return findStartAsync(world, center, radius, playerCount, type, false);
+        });
     }
 
-    private Optional<StartLocation> findStart(
+    private CompletableFuture<Optional<StartLocation>> findStartAsync(
         World world,
         Location center,
         int radius,
@@ -59,30 +75,69 @@ public final class StartLocationService {
         StartType type,
         boolean avoidWaterIfRecent
     ) {
-        for (int attempt = 0; attempt < MAX_LOCATION_ATTEMPTS; attempt++) {
-            Location column = randomColumn(world, center, radius);
-            preloadChunks(world, column.getBlockX(), column.getBlockZ());
+        CompletableFuture<Optional<StartLocation>> result = new CompletableFuture<>();
+        findStartAttemptAsync(world, center, radius, playerCount, type, avoidWaterIfRecent, 0, result);
+        return result;
+    }
+
+    private void findStartAttemptAsync(
+        World world,
+        Location center,
+        int radius,
+        int playerCount,
+        StartType type,
+        boolean avoidWaterIfRecent,
+        int attempt,
+        CompletableFuture<Optional<StartLocation>> result
+    ) {
+        if (result.isDone()) {
+            return;
+        }
+
+        if (attempt >= MAX_LOCATION_ATTEMPTS) {
+            result.complete(Optional.empty());
+            return;
+        }
+
+        Location column = randomColumn(world, center, radius);
+        preloadColumnChunkAsync(world, column.getBlockX(), column.getBlockZ()).whenComplete((ignored, throwable) -> {
+            if (result.isDone()) {
+                return;
+            }
+
+            if (throwable != null) {
+                result.completeExceptionally(throwable);
+                return;
+            }
 
             Optional<Location> safeCenter = switch (type) {
                 case SURFACE -> findSurfaceStart(world, column.getBlockX(), column.getBlockZ());
                 case UNDERGROUND -> findUndergroundStart(world, column.getBlockX(), column.getBlockZ());
             };
-            if (safeCenter.isEmpty()) {
-                continue;
+            if (safeCenter.isPresent()) {
+                StartCategory category = StartCategory.from(type, isWaterStart(safeCenter.get()));
+                boolean stillAvoidingRecentCategory = avoidWaterIfRecent && attempt < MAX_RECENT_CATEGORY_AVOID_ATTEMPTS;
+                if (!stillAvoidingRecentCategory || !shouldAvoid(category)) {
+                    List<Location> playerPositions = findPlayerPositions(safeCenter.get(), playerCount);
+                    if (playerPositions.size() >= playerCount) {
+                        StartLocation startLocation = new StartLocation(safeCenter.get(), playerPositions, type, category);
+                        preloadChunksAsync(world, column.getBlockX(), column.getBlockZ()).whenComplete((preloadIgnored, preloadThrowable) -> {
+                            if (result.isDone()) {
+                                return;
+                            }
+                            if (preloadThrowable != null) {
+                                result.completeExceptionally(preloadThrowable);
+                                return;
+                            }
+                            result.complete(Optional.of(startLocation));
+                        });
+                        return;
+                    }
+                }
             }
 
-            StartCategory category = StartCategory.from(type, isWaterStart(safeCenter.get()));
-            if (avoidWaterIfRecent && shouldAvoid(category)) {
-                continue;
-            }
-
-            List<Location> playerPositions = findPlayerPositions(safeCenter.get(), playerCount);
-            if (playerPositions.size() >= playerCount) {
-                return Optional.of(new StartLocation(safeCenter.get(), playerPositions, type, category));
-            }
-        }
-
-        return Optional.empty();
+            findStartAttemptAsync(world, center, radius, playerCount, type, avoidWaterIfRecent, attempt + 1, result);
+        });
     }
 
     private boolean shouldAvoid(StartCategory category) {
@@ -95,25 +150,35 @@ public final class StartLocationService {
     private Location randomColumn(World world, Location center, int radius) {
         double angle = random.nextDouble() * Math.PI * 2.0;
         double distance = Math.sqrt(random.nextDouble()) * radius;
-        int x = center.getBlockX() + (int) Math.round(Math.cos(angle) * distance);
-        int z = center.getBlockZ() + (int) Math.round(Math.sin(angle) * distance);
+        int x = centerChunkBlock(center.getBlockX() + (int) Math.round(Math.cos(angle) * distance));
+        int z = centerChunkBlock(center.getBlockZ() + (int) Math.round(Math.sin(angle) * distance));
         return new Location(world, x, 0, z);
     }
 
-    private void preloadChunks(World world, int x, int z) {
+    private int centerChunkBlock(int blockCoordinate) {
+        return (blockCoordinate >> 4) * 16 + 8;
+    }
+
+    private CompletableFuture<Chunk> preloadColumnChunkAsync(World world, int x, int z) {
+        return world.getChunkAtAsync(x >> 4, z >> 4, GENERATE_MISSING_CHUNKS);
+    }
+
+    private CompletableFuture<Void> preloadChunksAsync(World world, int x, int z) {
+        List<CompletableFuture<Chunk>> chunks = new ArrayList<>();
         int chunkX = x >> 4;
         int chunkZ = z >> 4;
 
         for (int dx = -PRELOAD_CHUNK_RADIUS; dx <= PRELOAD_CHUNK_RADIUS; dx++) {
             for (int dz = -PRELOAD_CHUNK_RADIUS; dz <= PRELOAD_CHUNK_RADIUS; dz++) {
-                Chunk chunk = world.getChunkAt(chunkX + dx, chunkZ + dz);
-                chunk.load(true);
+                chunks.add(world.getChunkAtAsync(chunkX + dx, chunkZ + dz, GENERATE_MISSING_CHUNKS));
             }
         }
+
+        return CompletableFuture.allOf(chunks.toArray(CompletableFuture[]::new));
     }
 
     private Optional<Location> findSurfaceStart(World world, int x, int z) {
-        int y = world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+        int y = world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES) + 1;
         if (y <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) {
             return Optional.empty();
         }

@@ -28,9 +28,11 @@ import java.util.OptionalInt;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public final class GameManager implements Listener {
     private static final int MAX_ROUND_PREPARATION_ATTEMPTS = 20;
+    private static final int MAX_PREPARATION_WAIT_SECONDS = 60;
 
     private final YRushPlugin plugin;
     private final Random random = new Random();
@@ -45,6 +47,7 @@ public final class GameManager implements Listener {
     private RoundContext context;
     private RoundResult lastResult;
     private int totalParticipants;
+    private int preparationGeneration;
 
     private final Set<UUID> participants = new HashSet<>();
     private final Set<UUID> activePlayers = new HashSet<>();
@@ -56,6 +59,8 @@ public final class GameManager implements Listener {
     private BukkitTask winCheckTask;
     private BukkitTask timeoutTask;
     private BukkitTask betweenRoundsTask;
+    private BukkitTask preparationTimeoutTask;
+    private CompletableFuture<Optional<RoundContext>> preparationTask;
 
     public GameManager(YRushPlugin plugin) {
         this.plugin = plugin;
@@ -80,6 +85,7 @@ public final class GameManager implements Listener {
         state = GameState.STOPPING;
         autoMode = false;
         cancelTasks();
+        cancelPreparation();
         cleanupPlayers(getLobbyLocation());
         clearRoundState();
         state = GameState.IDLE;
@@ -89,6 +95,7 @@ public final class GameManager implements Listener {
     public void shutdown() {
         autoMode = false;
         cancelTasks();
+        cancelPreparation();
         cleanupPlayers(getLobbyLocation());
         clearRoundState();
         state = GameState.IDLE;
@@ -100,6 +107,8 @@ public final class GameManager implements Listener {
         if (context != null) {
             sender.sendMessage("Target: " + context.direction().label() + " to Y " + context.targetY());
             sender.sendMessage("Active players: " + activePlayers.size() + "/" + totalParticipants);
+        } else if (state == GameState.COUNTDOWN && preparationTask != null) {
+            sender.sendMessage("Round preparation: waiting for start location");
         } else if (lastResult != null) {
             sender.sendMessage("Last result: " + lastResult.type());
         }
@@ -149,26 +158,69 @@ public final class GameManager implements Listener {
             player.setGameMode(GameMode.SURVIVAL);
         }
 
-        Optional<RoundContext> preparedRound = prepareRound(lobby, config, eligiblePlayers.size());
-        if (preparedRound.isEmpty()) {
-            cleanupPlayers(lobby);
-            clearRoundState();
-            state = GameState.IDLE;
-            autoMode = false;
-            sender.sendMessage("Could not find a safe YRush start location. Try again or increase the search radius.");
+        int generation = ++preparationGeneration;
+        preparationTask = prepareRoundAsync(lobby, config, eligiblePlayers.size());
+        preparationTimeoutTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (generation == preparationGeneration && state == GameState.COUNTDOWN && context == null) {
+                failRoundPreparation(sender, lobby, null);
+            }
+        }, MAX_PREPARATION_WAIT_SECONDS * 20L);
+        preparationTask.whenComplete((preparedRound, throwable) -> {
+            if (!plugin.isEnabled()) {
+                return;
+            }
+
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (generation != preparationGeneration || state != GameState.COUNTDOWN) {
+                    return;
+                }
+
+                preparationTask = null;
+                cancelTask(preparationTimeoutTask);
+                preparationTimeoutTask = null;
+                if (throwable != null || preparedRound.isEmpty()) {
+                    failRoundPreparation(sender, lobby, throwable);
+                    return;
+                }
+
+                context = preparedRound.get();
+                runCountdown(config.countdownSeconds());
+            });
+        });
+    }
+
+    private CompletableFuture<Optional<RoundContext>> prepareRoundAsync(Location lobby, YRushConfig config, int playerCount) {
+        CompletableFuture<Optional<RoundContext>> result = new CompletableFuture<>();
+        prepareRoundAttemptAsync(lobby, config, playerCount, 0, result);
+        return result;
+    }
+
+    private void prepareRoundAttemptAsync(
+        Location lobby,
+        YRushConfig config,
+        int playerCount,
+        int attempt,
+        CompletableFuture<Optional<RoundContext>> result
+    ) {
+        if (result.isDone()) {
             return;
         }
 
-        context = preparedRound.get();
-        runCountdown(config.countdownSeconds());
-    }
+        if (attempt >= MAX_ROUND_PREPARATION_ATTEMPTS) {
+            result.complete(Optional.empty());
+            return;
+        }
 
-    private Optional<RoundContext> prepareRound(Location lobby, YRushConfig config, int playerCount) {
         World world = lobby.getWorld();
-        for (int attempt = 0; attempt < MAX_ROUND_PREPARATION_ATTEMPTS; attempt++) {
-            Optional<StartLocation> start = startLocationService.findStart(world, lobby, config.startRadius(), playerCount);
+        startLocationService.findStartAsync(world, lobby, config.startRadius(), playerCount).whenComplete((start, throwable) -> {
+            if (throwable != null) {
+                result.completeExceptionally(throwable);
+                return;
+            }
+
             if (start.isEmpty()) {
-                return Optional.empty();
+                result.complete(Optional.empty());
+                return;
             }
 
             int startY = start.get().center().getBlockY();
@@ -180,12 +232,13 @@ public final class GameManager implements Listener {
                 start.get().category().isWater() ? TargetDirectionPreference.DOWN_ONLY : TargetDirectionPreference.ANY
             );
             if (targetY.isEmpty()) {
-                continue;
+                prepareRoundAttemptAsync(lobby, config, playerCount, attempt + 1, result);
+                return;
             }
 
             RoundDirection direction = targetY.getAsInt() > startY ? RoundDirection.UP : RoundDirection.DOWN;
             startLocationService.remember(start.get());
-            return Optional.of(new RoundContext(
+            result.complete(Optional.of(new RoundContext(
                 start.get().center(),
                 start.get().playerPositions(),
                 start.get().type(),
@@ -195,10 +248,8 @@ public final class GameManager implements Listener {
                 direction,
                 config.timeoutSeconds(),
                 null
-            ));
-        }
-
-        return Optional.empty();
+            )));
+        });
     }
 
     private void runCountdown(int countdownSeconds) {
@@ -222,6 +273,22 @@ public final class GameManager implements Listener {
             messages.countdown(players, secondsRemaining[0]);
             secondsRemaining[0]--;
         }, 0L, 20L);
+    }
+
+    private void failRoundPreparation(CommandSender sender, Location lobby, Throwable throwable) {
+        cancelTask(countdownTask);
+        countdownTask = null;
+        cancelTask(preparationTimeoutTask);
+        preparationTimeoutTask = null;
+        cancelPreparation();
+        cleanupPlayers(lobby);
+        clearRoundState();
+        state = GameState.IDLE;
+        autoMode = false;
+        sender.sendMessage("Could not find a safe YRush start location. Try again or increase the search radius.");
+        if (throwable != null) {
+            plugin.getLogger().warning("YRush round preparation failed: " + throwable.getMessage());
+        }
     }
 
     private void launchRound() {
@@ -338,6 +405,9 @@ public final class GameManager implements Listener {
         RoundContext finishedContext = context;
         int participantsAtFinish = totalParticipants;
         state = GameState.BETWEEN_ROUNDS;
+        cancelTask(countdownTask);
+        countdownTask = null;
+        cancelPreparation();
         cancelActiveRoundTasks();
 
         if (resultType == RoundResultType.WIN && winner != null && finishedContext != null) {
@@ -439,11 +509,13 @@ public final class GameManager implements Listener {
         cancelTask(winCheckTask);
         cancelTask(timeoutTask);
         cancelTask(betweenRoundsTask);
+        cancelTask(preparationTimeoutTask);
         countdownTask = null;
         actionBarTask = null;
         winCheckTask = null;
         timeoutTask = null;
         betweenRoundsTask = null;
+        preparationTimeoutTask = null;
     }
 
     private void cancelActiveRoundTasks() {
@@ -458,6 +530,14 @@ public final class GameManager implements Listener {
     private void cancelTask(BukkitTask task) {
         if (task != null) {
             task.cancel();
+        }
+    }
+
+    private void cancelPreparation() {
+        preparationGeneration++;
+        if (preparationTask != null) {
+            preparationTask.cancel(false);
+            preparationTask = null;
         }
     }
 
