@@ -15,6 +15,16 @@ public final class TargetYSelector {
     }
 
     public OptionalInt select(World world, int startY, int minimumDistance, int maximumDistance) {
+        return select(world, startY, minimumDistance, maximumDistance, TargetDirectionPreference.ANY);
+    }
+
+    public OptionalInt select(
+        World world,
+        int startY,
+        int minimumDistance,
+        int maximumDistance,
+        TargetDirectionPreference preference
+    ) {
         int minWorldY = world.getMinHeight();
         int maxWorldY = world.getMaxHeight() - 1;
 
@@ -26,10 +36,12 @@ public final class TargetYSelector {
             ranges.add(new Range(downMin, downMax));
         }
 
-        int upMin = startY + minimumDistance;
-        int upMax = Math.min(maxWorldY, startY + maximumDistance);
-        if (upMin <= upMax) {
-            ranges.add(new Range(upMin, upMax));
+        if (preference != TargetDirectionPreference.DOWN_ONLY) {
+            int upMin = startY + minimumDistance;
+            int upMax = Math.min(maxWorldY, startY + maximumDistance);
+            if (upMin <= upMax) {
+                ranges.add(new Range(upMin, upMax));
+            }
         }
 
         if (ranges.isEmpty()) {
@@ -54,4 +66,3 @@ public final class TargetYSelector {
         }
     }
 }
-

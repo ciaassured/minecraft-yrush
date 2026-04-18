@@ -9,6 +9,7 @@ public record RoundContext(
     Location startCenter,
     List<Location> playerStarts,
     StartType startType,
+    StartCategory startCategory,
     int startY,
     int targetY,
     RoundDirection direction,

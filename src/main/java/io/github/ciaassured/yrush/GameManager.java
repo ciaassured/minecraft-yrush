@@ -30,6 +30,8 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class GameManager implements Listener {
+    private static final int MAX_ROUND_PREPARATION_ATTEMPTS = 20;
+
     private final YRushPlugin plugin;
     private final Random random = new Random();
     private final MessageService messages = new MessageService();
@@ -165,33 +167,40 @@ public final class GameManager implements Listener {
 
     private Optional<RoundContext> prepareRound(Location lobby, YRushConfig config, int playerCount) {
         World world = lobby.getWorld();
-        Optional<StartLocation> start = startLocationService.findStart(world, lobby, config.startRadius(), playerCount);
-        if (start.isEmpty()) {
-            return Optional.empty();
+        for (int attempt = 0; attempt < MAX_ROUND_PREPARATION_ATTEMPTS; attempt++) {
+            Optional<StartLocation> start = startLocationService.findStart(world, lobby, config.startRadius(), playerCount);
+            if (start.isEmpty()) {
+                return Optional.empty();
+            }
+
+            int startY = start.get().center().getBlockY();
+            OptionalInt targetY = targetYSelector.select(
+                world,
+                startY,
+                config.targetMinimumDistance(),
+                config.targetMaximumDistance(),
+                start.get().category().isWater() ? TargetDirectionPreference.DOWN_ONLY : TargetDirectionPreference.ANY
+            );
+            if (targetY.isEmpty()) {
+                continue;
+            }
+
+            RoundDirection direction = targetY.getAsInt() > startY ? RoundDirection.UP : RoundDirection.DOWN;
+            startLocationService.remember(start.get());
+            return Optional.of(new RoundContext(
+                start.get().center(),
+                start.get().playerPositions(),
+                start.get().type(),
+                start.get().category(),
+                startY,
+                targetY.getAsInt(),
+                direction,
+                config.timeoutSeconds(),
+                null
+            ));
         }
 
-        int startY = start.get().center().getBlockY();
-        OptionalInt targetY = targetYSelector.select(
-            world,
-            startY,
-            config.targetMinimumDistance(),
-            config.targetMaximumDistance()
-        );
-        if (targetY.isEmpty()) {
-            return Optional.empty();
-        }
-
-        RoundDirection direction = targetY.getAsInt() > startY ? RoundDirection.UP : RoundDirection.DOWN;
-        return Optional.of(new RoundContext(
-            start.get().center(),
-            start.get().playerPositions(),
-            start.get().type(),
-            startY,
-            targetY.getAsInt(),
-            direction,
-            config.timeoutSeconds(),
-            null
-        ));
+        return Optional.empty();
     }
 
     private void runCountdown(int countdownSeconds) {
@@ -245,6 +254,7 @@ public final class GameManager implements Listener {
             context.startCenter(),
             context.playerStarts(),
             context.startType(),
+            context.startCategory(),
             context.startY(),
             context.targetY(),
             context.direction(),

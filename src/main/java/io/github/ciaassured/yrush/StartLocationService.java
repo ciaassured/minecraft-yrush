@@ -3,6 +3,7 @@ package io.github.ciaassured.yrush;
 import org.bukkit.Chunk;
 import org.bukkit.HeightMap;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ public final class StartLocationService {
 
     private final Random random;
     private final SafeLocationValidator validator;
+    private StartCategory lastStartCategory;
 
     public StartLocationService(Random random, SafeLocationValidator validator) {
         this.random = random;
@@ -36,7 +38,27 @@ public final class StartLocationService {
         return findStart(world, center, radius, playerCount, fallbackType);
     }
 
+    public void remember(StartLocation startLocation) {
+        lastStartCategory = startLocation.category();
+    }
+
     private Optional<StartLocation> findStart(World world, Location center, int radius, int playerCount, StartType type) {
+        Optional<StartLocation> dryStart = findStart(world, center, radius, playerCount, type, true);
+        if (dryStart.isPresent()) {
+            return dryStart;
+        }
+
+        return findStart(world, center, radius, playerCount, type, false);
+    }
+
+    private Optional<StartLocation> findStart(
+        World world,
+        Location center,
+        int radius,
+        int playerCount,
+        StartType type,
+        boolean avoidWaterIfRecent
+    ) {
         for (int attempt = 0; attempt < MAX_LOCATION_ATTEMPTS; attempt++) {
             Location column = randomColumn(world, center, radius);
             preloadChunks(world, column.getBlockX(), column.getBlockZ());
@@ -49,13 +71,25 @@ public final class StartLocationService {
                 continue;
             }
 
+            StartCategory category = StartCategory.from(type, isWaterStart(safeCenter.get()));
+            if (avoidWaterIfRecent && shouldAvoid(category)) {
+                continue;
+            }
+
             List<Location> playerPositions = findPlayerPositions(safeCenter.get(), playerCount);
             if (playerPositions.size() >= playerCount) {
-                return Optional.of(new StartLocation(safeCenter.get(), playerPositions, type));
+                return Optional.of(new StartLocation(safeCenter.get(), playerPositions, type, category));
             }
         }
 
         return Optional.empty();
+    }
+
+    private boolean shouldAvoid(StartCategory category) {
+        if (lastStartCategory == null) {
+            return false;
+        }
+        return category == lastStartCategory || category.isWater() && lastStartCategory.isWater();
     }
 
     private Location randomColumn(World world, Location center, int radius) {
@@ -137,5 +171,16 @@ public final class StartLocationService {
 
     private Location centered(World world, int x, int y, int z) {
         return new Location(world, x + 0.5, y, z + 0.5);
+    }
+
+    private boolean isWaterStart(Location location) {
+        World world = location.getWorld();
+        if (world == null) {
+            return false;
+        }
+
+        Material feet = world.getBlockAt(location.getBlockX(), location.getBlockY(), location.getBlockZ()).getType();
+        Material below = world.getBlockAt(location.getBlockX(), location.getBlockY() - 1, location.getBlockZ()).getType();
+        return feet == Material.WATER || below == Material.WATER;
     }
 }
