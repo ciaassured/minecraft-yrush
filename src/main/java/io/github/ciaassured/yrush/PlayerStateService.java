@@ -16,7 +16,7 @@ public final class PlayerStateService {
     }
 
     public void giveUndergroundStartItems(Player player) {
-        player.getInventory().addItem(new ItemStack(Material.STONE_PICKAXE));
+        player.getInventory().addItem(new ItemStack(Material.WOODEN_PICKAXE));
     }
 
     public void restoreAfterRound(Player player, GameMode originalGameMode, Location lobby) {
