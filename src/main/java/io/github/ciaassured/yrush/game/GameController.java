@@ -61,8 +61,8 @@ public final class GameController implements Listener {
         autoMode = false;
         cancelBetweenRoundsTask();
         if (currentRound != null) {
-            Map<UUID, GameMode> offline = currentRound.dispose();
-            pendingRestores.putAll(offline);
+            currentRound.close();
+            pendingRestores.putAll(currentRound.drainOfflineRestores());
             currentRound = null;
             lastResult = RoundResult.stopped();
         }
@@ -73,7 +73,7 @@ public final class GameController implements Listener {
         autoMode = false;
         cancelBetweenRoundsTask();
         if (currentRound != null) {
-            currentRound.dispose();
+            currentRound.close();
             currentRound = null;
         }
     }

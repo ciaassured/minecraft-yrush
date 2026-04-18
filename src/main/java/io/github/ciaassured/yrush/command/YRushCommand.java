@@ -6,9 +6,12 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 
-import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
 public final class YRushCommand implements CommandExecutor, TabCompleter {
     private final GameController gameController;
@@ -24,54 +27,35 @@ public final class YRushCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "start" -> {
-                if (!sender.hasPermission("yrush.start")) {
-                    sender.sendMessage("You do not have permission to start YRush.");
-                    return true;
-                }
-                boolean auto = args.length > 1 && args[1].equalsIgnoreCase("auto");
-                gameController.start(sender, auto);
-            }
-            case "stop" -> {
-                if (!sender.hasPermission("yrush.stop")) {
-                    sender.sendMessage("You do not have permission to stop YRush.");
-                    return true;
-                }
-                gameController.stop(sender);
-            }
-            case "status" -> {
-                if (!sender.hasPermission("yrush.status")) {
-                    sender.sendMessage("You do not have permission to view YRush status.");
-                    return true;
-                }
-                gameController.sendStatus(sender);
-            }
-            case "setspawn" -> {
-                if (!sender.hasPermission("yrush.setspawn")) {
-                    sender.sendMessage("You do not have permission to set the YRush lobby.");
-                    return true;
-                }
-                gameController.setLobby(sender);
-            }
-            default -> sendUsage(sender);
+        Optional<Subcommand> sub = Subcommand.fromName(args[0].toLowerCase(Locale.ROOT));
+        if (sub.isEmpty()) {
+            sendUsage(sender);
+            return true;
         }
+
+        if (!sender.hasPermission(sub.get().permission)) {
+            sender.sendMessage("You do not have permission to use this command.");
+            return true;
+        }
+
+        sub.get().execute(gameController, sender, args);
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            List<String> values = new ArrayList<>();
-            if (sender.hasPermission("yrush.start"))   values.add("start");
-            if (sender.hasPermission("yrush.stop"))    values.add("stop");
-            if (sender.hasPermission("yrush.status"))  values.add("status");
-            if (sender.hasPermission("yrush.setspawn")) values.add("setspawn");
-            return filter(values, args[0]);
+            String prefix = args[0].toLowerCase(Locale.ROOT);
+            return Arrays.stream(Subcommand.values())
+                .filter(s -> sender.hasPermission(s.permission))
+                .map(s -> s.name)
+                .filter(name -> name.startsWith(prefix))
+                .toList();
         }
 
-        if (args.length == 2 && args[0].equalsIgnoreCase("start") && sender.hasPermission("yrush.start")) {
-            return filter(List.of("auto"), args[1]);
+        if (args.length == 2 && Subcommand.START.matches(args[0]) && sender.hasPermission(Subcommand.START.permission)) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return List.of("auto").stream().filter(s -> s.startsWith(prefix)).toList();
         }
 
         return List.of();
@@ -81,8 +65,51 @@ public final class YRushCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("Usage: /yrush <start [auto]|stop|status|setspawn>");
     }
 
-    private List<String> filter(List<String> values, String prefix) {
-        String normalized = prefix.toLowerCase(Locale.ROOT);
-        return values.stream().filter(v -> v.startsWith(normalized)).toList();
+    // ── Dispatch table ────────────────────────────────────────────────────────
+
+    private enum Subcommand {
+        START("start", "yrush.start") {
+            @Override void execute(GameController gc, CommandSender sender, String[] args) {
+                gc.start(sender, args.length > 1 && args[1].equalsIgnoreCase("auto"));
+            }
+        },
+        STOP("stop", "yrush.stop") {
+            @Override void execute(GameController gc, CommandSender sender, String[] args) {
+                gc.stop(sender);
+            }
+        },
+        STATUS("status", "yrush.status") {
+            @Override void execute(GameController gc, CommandSender sender, String[] args) {
+                gc.sendStatus(sender);
+            }
+        },
+        SETSPAWN("setspawn", "yrush.setspawn") {
+            @Override void execute(GameController gc, CommandSender sender, String[] args) {
+                gc.setLobby(sender);
+            }
+        };
+
+        final String name;
+        final String permission;
+
+        Subcommand(String name, String permission) {
+            this.name = name;
+            this.permission = permission;
+        }
+
+        abstract void execute(GameController gc, CommandSender sender, String[] args);
+
+        boolean matches(String input) {
+            return name.equalsIgnoreCase(input);
+        }
+
+        private static final Map<String, Subcommand> BY_NAME = new HashMap<>();
+        static {
+            for (Subcommand s : values()) BY_NAME.put(s.name, s);
+        }
+
+        static Optional<Subcommand> fromName(String name) {
+            return Optional.ofNullable(BY_NAME.get(name));
+        }
     }
 }
