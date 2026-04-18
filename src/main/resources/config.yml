@@ -1,11 +1,11 @@
 round:
   countdown-seconds: 5
   between-rounds-seconds: 5
-  timeout-seconds: 120
+  timeout-seconds: 240
 
 target-y:
   minimum-distance: 10
-  maximum-distance: 96
+  maximum-distance: 50
 
 start-location:
   radius: 3000
