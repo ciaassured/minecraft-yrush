@@ -41,10 +41,14 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Owns the entire lifecycle of a single round: preparation, countdown, active play, and cleanup.
- * Registers itself as a Bukkit listener on construction and unregisters on disposal.
+ * Registers itself as a Bukkit listener on construction and unregisters on close.
  * All round state lives here; nothing leaks to GameController.
+ *
+ * <p>Implements {@link AutoCloseable}: calling {@link #close()} is always safe, idempotent,
+ * and performs full cleanup. After closing, call {@link #drainOfflineRestores()} to retrieve
+ * the original game modes for any players who were offline at cleanup time.
  */
-public final class Round implements Listener {
+public final class Round implements Listener, AutoCloseable {
     private static final int MAX_PREPARATION_ATTEMPTS = 20;
     private static final int PREPARATION_TIMEOUT_SECONDS = 60;
 
@@ -73,8 +77,11 @@ public final class Round implements Listener {
     private BukkitTask preparationTimeoutTask;
     private CompletableFuture<?> preparationFuture;
 
-    // Guards against double-disposal and stale async callbacks.
+    // Guards against double-close and stale async callbacks.
     private boolean disposed = false;
+
+    // Populated by close(); drained by drainOfflineRestores().
+    private Map<UUID, GameMode> offlineRestores;
 
     Round(
         YRushPlugin plugin,
@@ -114,18 +121,31 @@ public final class Round implements Listener {
     // ── External API ────────────────────────────────────────────────────────
 
     /**
-     * Externally cancels this round (e.g. /yrush stop).
-     * Safe to call even if already disposed.
-     * Returns original game modes for players who were offline at cleanup time,
-     * so the caller can restore them when those players rejoin.
+     * Cancels this round and releases all resources: unregisters events, cancels tasks,
+     * and restores all participants to their pre-game state. Idempotent — safe to call
+     * multiple times or from any code path (stop command, plugin disable, or round end).
+     *
+     * <p>After calling close(), call {@link #drainOfflineRestores()} to retrieve original
+     * game modes for players who were offline and could not be restored immediately.
      */
-    Map<UUID, GameMode> dispose() {
-        if (disposed) return Map.of();
+    @Override
+    public void close() {
+        if (disposed) return;
         disposed = true;
 
         HandlerList.unregisterAll(this);
         cancelAllTasks();
-        return restorePlayers();
+        offlineRestores = restorePlayers();
+    }
+
+    /**
+     * Returns the offline-player restore map populated by the most recent {@link #close()} call,
+     * then clears it. Returns an empty map if close() has not been called or was already drained.
+     */
+    Map<UUID, GameMode> drainOfflineRestores() {
+        Map<UUID, GameMode> result = offlineRestores != null ? offlineRestores : Map.of();
+        offlineRestores = null;
+        return result;
     }
 
     void sendStatus(CommandSender sender) {
@@ -343,8 +363,8 @@ public final class Round implements Listener {
             MessageService.broadcastDraw();
         }
 
-        Map<UUID, GameMode> offlineRestores = dispose();
-        onComplete.onComplete(result, offlineRestores, categoryUsed);
+        close();
+        onComplete.onComplete(result, drainOfflineRestores(), categoryUsed);
     }
 
     private void eliminate(Player player) {
