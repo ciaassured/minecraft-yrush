@@ -10,3 +10,5 @@ target-y:
 start-location:
   radius: 3000
 
+debug:
+  enabled: false

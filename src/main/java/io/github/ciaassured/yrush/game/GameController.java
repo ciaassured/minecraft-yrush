@@ -3,6 +3,7 @@ package io.github.ciaassured.yrush.game;
 import io.github.ciaassured.yrush.YRushPlugin;
 import io.github.ciaassured.yrush.config.YRushConfig;
 import io.github.ciaassured.yrush.location.StartCategory;
+import io.github.ciaassured.yrush.service.DebugService;
 import io.github.ciaassured.yrush.service.MessageService;
 import io.github.ciaassured.yrush.service.PlayerStateService;
 import org.bukkit.Bukkit;
@@ -28,18 +29,21 @@ import java.util.UUID;
  */
 public final class GameController implements Listener {
     private final YRushPlugin plugin;
+    private final DebugService debug;
 
     private Round currentRound;
     private boolean autoMode;
     private BukkitTask betweenRoundsTask;
     private StartCategory lastStartCategory;
     private RoundResult lastResult;
+    private int nextRoundId = 1;
 
     // Original game modes for players who disconnected before cleanup could run.
     private final Map<UUID, GameMode> pendingRestores = new HashMap<>();
 
     public GameController(YRushPlugin plugin) {
         this.plugin = plugin;
+        this.debug = new DebugService(plugin);
     }
 
     // ── Commands ─────────────────────────────────────────────────────────────
@@ -50,6 +54,7 @@ public final class GameController implements Listener {
             return;
         }
         autoMode = auto;
+        debug.log("Starting YRush. autoMode=" + auto);
         launchRound(sender);
     }
 
@@ -61,8 +66,11 @@ public final class GameController implements Listener {
         autoMode = false;
         cancelBetweenRoundsTask();
         if (currentRound != null) {
+            debug.log("Stopping active round.");
             currentRound.close();
-            pendingRestores.putAll(currentRound.drainOfflineRestores());
+            Map<UUID, GameMode> offlineRestores = currentRound.drainOfflineRestores();
+            debug.log("Stop queued offline restores=" + offlineRestores.size());
+            pendingRestores.putAll(offlineRestores);
             currentRound = null;
             lastResult = RoundResult.stopped();
         }
@@ -73,6 +81,7 @@ public final class GameController implements Listener {
         autoMode = false;
         cancelBetweenRoundsTask();
         if (currentRound != null) {
+            debug.log("Plugin shutdown closing active round.");
             currentRound.close();
             currentRound = null;
         }
@@ -116,11 +125,17 @@ public final class GameController implements Listener {
 
         if (eligible.isEmpty()) {
             initiator.sendMessage("No eligible players found in the lobby world (must be in survival or adventure mode).");
+            debug.log("Round launch skipped: no eligible players. autoMode=" + autoMode);
             if (autoMode) scheduleNextRound();
             return;
         }
 
-        currentRound = new Round(plugin, eligible, config, lobby, lastStartCategory, this::onRoundComplete);
+        int roundId = nextRoundId++;
+        debug.log("Launching round=" + roundId
+            + " participants=" + eligible.size()
+            + " autoMode=" + autoMode
+            + " lastStartCategory=" + lastStartCategory);
+        currentRound = new Round(plugin, roundId, eligible, config, lobby, lastStartCategory, debug, this::onRoundComplete);
     }
 
     private void onRoundComplete(RoundResult result, Map<UUID, GameMode> offlineRestores, StartCategory categoryUsed) {
@@ -128,6 +143,12 @@ public final class GameController implements Listener {
         lastStartCategory = categoryUsed;
         currentRound = null;
         pendingRestores.putAll(offlineRestores);
+        debug.log("Round complete. result=" + result.type()
+            + " winner=" + result.winnerId().map(UUID::toString).orElse("none")
+            + " duration=" + result.duration()
+            + " participants=" + result.participantCount()
+            + " category=" + categoryUsed
+            + " offlineRestores=" + offlineRestores.size());
 
         if (autoMode) {
             scheduleNextRound();
@@ -136,6 +157,7 @@ public final class GameController implements Listener {
 
     private void scheduleNextRound() {
         int delaySecs = YRushConfig.from(plugin.getConfig()).betweenRoundsSeconds();
+        debug.log("Scheduling next auto round in " + delaySecs + "s.");
         betweenRoundsTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             betweenRoundsTask = null;
             launchRound(Bukkit.getConsoleSender());
@@ -146,6 +168,7 @@ public final class GameController implements Listener {
         if (betweenRoundsTask != null) {
             betweenRoundsTask.cancel();
             betweenRoundsTask = null;
+            debug.log("Cancelled between-rounds task.");
         }
     }
 
@@ -156,6 +179,7 @@ public final class GameController implements Listener {
         Player player = event.getPlayer();
         GameMode original = pendingRestores.remove(player.getUniqueId());
         if (original == null) return;
+        debug.log("Restoring offline participant on join. player=" + player.getName());
         // Defer one tick so join processing finishes before we teleport/restore.
         Bukkit.getScheduler().runTask(plugin,
             () -> PlayerStateService.restoreAfterRound(player, original, getLobbyLocation()));

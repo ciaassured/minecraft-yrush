@@ -7,6 +7,7 @@ import io.github.ciaassured.yrush.location.StartCategory;
 import io.github.ciaassured.yrush.location.StartLocationService;
 import io.github.ciaassured.yrush.location.TargetDirectionPreference;
 import io.github.ciaassured.yrush.location.TargetYSelector;
+import io.github.ciaassured.yrush.service.DebugService;
 import io.github.ciaassured.yrush.service.MessageService;
 import io.github.ciaassured.yrush.service.PlayerStateService;
 import org.bukkit.Bukkit;
@@ -67,8 +68,10 @@ public final class Round implements Listener, AutoCloseable {
     }
 
     private final YRushPlugin plugin;
+    private final int roundId;
     private final YRushConfig config;
     private final Location lobby;
+    private final DebugService debug;
     private final RoundCompletionHandler onComplete;
     private final StartLocationService startLocationService;
     private final TargetYSelector targetYSelector;
@@ -101,15 +104,19 @@ public final class Round implements Listener, AutoCloseable {
 
     Round(
         YRushPlugin plugin,
+        int roundId,
         List<Player> players,
         YRushConfig config,
         Location lobby,
         StartCategory lastStartCategory,
+        DebugService debug,
         RoundCompletionHandler onComplete
     ) {
         this.plugin = plugin;
+        this.roundId = roundId;
         this.config = config;
         this.lobby = lobby;
+        this.debug = debug;
         this.onComplete = onComplete;
 
         Random random = new Random();
@@ -130,7 +137,11 @@ public final class Round implements Listener, AutoCloseable {
         this.totalParticipants  = players.size();
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        // MessageService.broadcast("YRush is starting! Searching for a start location...");
+        debug("Created round. participants=" + totalParticipants
+            + " radius=" + config.startRadius()
+            + " countdownSeconds=" + config.countdownSeconds()
+            + " timeoutSeconds=" + config.timeoutSeconds()
+            + " lastStartCategory=" + lastStartCategory);
         startPreparation();
     }
 
@@ -149,9 +160,11 @@ public final class Round implements Listener, AutoCloseable {
         if (disposed) return;
         disposed = true;
 
+        debug("Closing round. phase=" + phase);
         HandlerList.unregisterAll(this);
         cancelAllTasks();
         offlineRestores = restorePlayers();
+        debug("Round closed. offlineRestores=" + offlineRestores.size());
     }
 
     /**
@@ -180,6 +193,7 @@ public final class Round implements Listener, AutoCloseable {
     // ── Preparation ─────────────────────────────────────────────────────────
 
     private void startPreparation() {
+        debug("Preparing start location.");
         CompletableFuture<Optional<RoundContext>> future = new CompletableFuture<>();
         preparationFuture = future;
 
@@ -203,6 +217,7 @@ public final class Round implements Listener, AutoCloseable {
         if (disposed || result.isDone()) return;
 
         if (attempt >= MAX_PREPARATION_ATTEMPTS) {
+            debug("Preparation failed: max attempts reached.");
             result.complete(Optional.empty());
             return;
         }
@@ -223,11 +238,21 @@ public final class Round implements Listener, AutoCloseable {
 
                 if (targetY.isEmpty()) {
                     // Location found but world bounds can't accommodate the required Y distance — retry.
+                    debug("Prepared start had no valid target Y. attempt=" + attempt
+                        + " category=" + start.get().category()
+                        + " startY=" + startY);
                     Bukkit.getScheduler().runTask(plugin, () -> attemptPreparation(attempt + 1, result));
                     return;
                 }
 
                 RoundDirection direction = targetY.getAsInt() > startY ? RoundDirection.UP : RoundDirection.DOWN;
+                debug("Preparation succeeded. attempt=" + attempt
+                    + " type=" + start.get().type()
+                    + " category=" + start.get().category()
+                    + " startY=" + startY
+                    + " targetY=" + targetY.getAsInt()
+                    + " direction=" + direction
+                    + " playerStarts=" + start.get().playerPositions().size());
                 result.complete(Optional.of(new RoundContext(
                     start.get().center(),
                     start.get().playerPositions(),
@@ -245,9 +270,11 @@ public final class Round implements Listener, AutoCloseable {
     private void onPreparationComplete(Optional<RoundContext> prepared, Throwable ex) {
         if (ex != null) {
             plugin.getLogger().warning("YRush round preparation failed: " + ex.getMessage());
+            debug("Preparation failed with exception: " + ex.getMessage());
         }
 
         if (prepared == null || prepared.isEmpty()) {
+            debug("Preparation failed with no start context.");
             MessageService.broadcast("YRush could not find a safe start location. Cancelling round.");
             finishRound(RoundResultType.STOPPED, null);
             return;
@@ -267,6 +294,7 @@ public final class Round implements Listener, AutoCloseable {
         }
 
         MessageService.roundStartingSoon(players);
+        debug("Get Ready shown. teleportDelayTicks=" + PRE_TELEPORT_DELAY_TICKS);
         preTeleportTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             preTeleportTask = null;
             if (!disposed && phase == Phase.PREPARING) {
@@ -293,6 +321,9 @@ public final class Round implements Listener, AutoCloseable {
         }
 
         phase = Phase.LOCKED_COUNTDOWN;
+        debug("Players teleported and locked. players=" + players.size()
+            + " waterStart=" + waterStart
+            + " countdownSeconds=" + config.countdownSeconds());
         startCountdown();
     }
 
@@ -335,6 +366,10 @@ public final class Round implements Listener, AutoCloseable {
 
         context = context.withStartedAt(Instant.now());
         phase = Phase.ACTIVE;
+        debug("Round active. objective=" + context.direction()
+            + " distance=" + Math.abs(context.targetY() - context.startY())
+            + " targetY=" + context.targetY()
+            + " activePlayers=" + activePlayers.size());
         MessageService.roundStart(players, context);
         startActiveTasks();
     }
@@ -416,6 +451,10 @@ public final class Round implements Listener, AutoCloseable {
             MessageService.broadcastDraw();
         }
 
+        debug("Finishing round. result=" + resultType
+            + " winner=" + (winner == null ? "none" : winner.getName())
+            + " duration=" + duration
+            + " activePlayers=" + activePlayers.size());
         close();
         onComplete.onComplete(result, drainOfflineRestores(), categoryUsed);
     }
@@ -425,6 +464,8 @@ public final class Round implements Listener, AutoCloseable {
         activePlayers.remove(id);
         eliminatedPlayers.add(id);
 
+        debug("Player eliminated. player=" + player.getName()
+            + " activePlayers=" + activePlayers.size());
         if (context != null) {
             PlayerStateService.eliminateToSpectator(player, context.startCenter());
         }
@@ -514,6 +555,9 @@ public final class Round implements Listener, AutoCloseable {
         if (!activePlayers.remove(id)) return;
 
         eliminatedPlayers.add(id);
+        debug("Player quit during round. player=" + event.getPlayer().getName()
+            + " phase=" + phase
+            + " activePlayers=" + activePlayers.size());
 
         if (activePlayers.isEmpty()) {
             // Defer one tick so the quitting player is fully gone before dispose() checks isOnline().
@@ -550,9 +594,14 @@ public final class Round implements Listener, AutoCloseable {
                 PlayerStateService.restoreAfterRound(player, original, lobby);
             } else {
                 offline.put(id, original);
+                debug("Queued offline restore. playerId=" + id);
             }
         }
         return offline;
+    }
+
+    private void debug(String message) {
+        debug.log("round=" + roundId + " " + message);
     }
 
     private void cancelAllTasks() {

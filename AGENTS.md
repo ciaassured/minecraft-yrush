@@ -62,6 +62,9 @@ target-y:
 
 start-location:
   radius: 3000
+
+debug:
+  enabled: false
 ```
 
 When `/yrush setspawn` is used, the plugin may add:
@@ -361,6 +364,7 @@ State and task rules:
 - Async chunk preparation must use Paper async chunk APIs. Do not reintroduce synchronous chunk loading for random start generation.
 - Async callbacks must guard against stale/disposed rounds before mutating state.
 - Preserve offline restore behavior. If a participant is offline during cleanup, keep their original game mode in `GameController` and restore them on join.
+- Debug logging should stay console-only and behind `debug.enabled`. Prefer focused lifecycle/failure logs over noisy per-event logs.
 
 ## Future Features
 
