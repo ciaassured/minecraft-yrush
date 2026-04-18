@@ -92,6 +92,8 @@ Kits: none
 Death elimination: always on
 Timeout result: draw
 All players dead/quit result: draw
+Start weighting: prefer surface starts 70% of rounds and underground starts 30% of rounds
+Underground start item: give each player one stone pickaxe for that round only
 ```
 
 ## Game Flow
@@ -160,6 +162,7 @@ Each round chooses a random start location inside `start-location.radius`.
 V1 requirements:
 
 - Starts may be above ground or underground.
+- Start selection should prefer surface starts 70% of rounds and underground starts 30% of rounds.
 - Water starts are allowed.
 - Lava starts are not allowed.
 - Players must not spawn inside solid blocks.
@@ -210,6 +213,7 @@ Before a round starts:
 During a round:
 
 - Players race with empty inventories.
+- If the round starts underground, each player gets one stone pickaxe.
 - Players may break/place blocks normally.
 - World changes remain between rounds.
 

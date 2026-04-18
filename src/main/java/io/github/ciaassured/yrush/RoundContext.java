@@ -8,6 +8,7 @@ import java.util.List;
 public record RoundContext(
     Location startCenter,
     List<Location> playerStarts,
+    StartType startType,
     int startY,
     int targetY,
     RoundDirection direction,
@@ -27,4 +28,3 @@ public record RoundContext(
         return Math.max(0, timeoutSeconds - elapsed);
     }
 }
-

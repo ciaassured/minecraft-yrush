@@ -185,6 +185,7 @@ public final class GameManager implements Listener {
         return Optional.of(new RoundContext(
             start.get().center(),
             start.get().playerPositions(),
+            start.get().type(),
             startY,
             targetY.getAsInt(),
             direction,
@@ -233,12 +234,17 @@ public final class GameManager implements Listener {
 
         List<Location> starts = context.playerStarts();
         for (int i = 0; i < players.size(); i++) {
-            players.get(i).teleport(starts.get(i % starts.size()));
+            Player player = players.get(i);
+            player.teleport(starts.get(i % starts.size()));
+            if (context.startType() == StartType.UNDERGROUND) {
+                playerStateService.giveUndergroundStartItems(player);
+            }
         }
 
         context = new RoundContext(
             context.startCenter(),
             context.playerStarts(),
+            context.startType(),
             context.startY(),
             context.targetY(),
             context.direction(),

@@ -2,6 +2,7 @@ package io.github.ciaassured.yrush;
 
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Player;
@@ -12,6 +13,10 @@ public final class PlayerStateService {
     public void resetForRound(Player player) {
         clearInventory(player);
         resetVitals(player);
+    }
+
+    public void giveUndergroundStartItems(Player player) {
+        player.getInventory().addItem(new ItemStack(Material.STONE_PICKAXE));
     }
 
     public void restoreAfterRound(Player player, GameMode originalGameMode, Location lobby) {
@@ -51,4 +56,3 @@ public final class PlayerStateService {
         }
     }
 }
-

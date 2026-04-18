@@ -1,6 +1,7 @@
 package io.github.ciaassured.yrush;
 
 import org.bukkit.Chunk;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -14,6 +15,7 @@ public final class StartLocationService {
     private static final int MAX_LOCATION_ATTEMPTS = 150;
     private static final int PLAYER_SPREAD_RADIUS = 4;
     private static final int PRELOAD_CHUNK_RADIUS = 1;
+    private static final int SURFACE_START_PERCENT = 70;
 
     private final Random random;
     private final SafeLocationValidator validator;
@@ -24,18 +26,32 @@ public final class StartLocationService {
     }
 
     public Optional<StartLocation> findStart(World world, Location center, int radius, int playerCount) {
+        StartType preferredType = random.nextInt(100) < SURFACE_START_PERCENT ? StartType.SURFACE : StartType.UNDERGROUND;
+        Optional<StartLocation> preferredStart = findStart(world, center, radius, playerCount, preferredType);
+        if (preferredStart.isPresent()) {
+            return preferredStart;
+        }
+
+        StartType fallbackType = preferredType == StartType.SURFACE ? StartType.UNDERGROUND : StartType.SURFACE;
+        return findStart(world, center, radius, playerCount, fallbackType);
+    }
+
+    private Optional<StartLocation> findStart(World world, Location center, int radius, int playerCount, StartType type) {
         for (int attempt = 0; attempt < MAX_LOCATION_ATTEMPTS; attempt++) {
             Location column = randomColumn(world, center, radius);
             preloadChunks(world, column.getBlockX(), column.getBlockZ());
 
-            Optional<Location> safeCenter = findSafeY(world, column.getBlockX(), column.getBlockZ());
+            Optional<Location> safeCenter = switch (type) {
+                case SURFACE -> findSurfaceStart(world, column.getBlockX(), column.getBlockZ());
+                case UNDERGROUND -> findUndergroundStart(world, column.getBlockX(), column.getBlockZ());
+            };
             if (safeCenter.isEmpty()) {
                 continue;
             }
 
             List<Location> playerPositions = findPlayerPositions(safeCenter.get(), playerCount);
             if (playerPositions.size() >= playerCount) {
-                return Optional.of(new StartLocation(safeCenter.get(), playerPositions));
+                return Optional.of(new StartLocation(safeCenter.get(), playerPositions, type));
             }
         }
 
@@ -62,9 +78,23 @@ public final class StartLocationService {
         }
     }
 
-    private Optional<Location> findSafeY(World world, int x, int z) {
+    private Optional<Location> findSurfaceStart(World world, int x, int z) {
+        int y = world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+        if (y <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) {
+            return Optional.empty();
+        }
+
+        Location location = centered(world, x, y, z);
+        if (validator.isSafe(location)) {
+            return Optional.of(location);
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Location> findUndergroundStart(World world, int x, int z) {
         int minY = world.getMinHeight() + 1;
-        int maxY = world.getMaxHeight() - 2;
+        int maxY = Math.min(world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES) - 6, world.getMaxHeight() - 2);
         if (minY > maxY) {
             return Optional.empty();
         }
