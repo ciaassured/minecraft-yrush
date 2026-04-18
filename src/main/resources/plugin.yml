@@ -1,0 +1,27 @@
+name: YRush
+version: ${version}
+main: io.github.ciaassured.yrush.YRushPlugin
+api-version: '1.21'
+author: CIA Assured
+description: Race to a random Y coordinate from random safe starts.
+
+commands:
+  yrush:
+    description: Controls the YRush minigame.
+    usage: /yrush <start|stop|status|setspawn>
+    permission: yrush.status
+
+permissions:
+  yrush.start:
+    description: Allows starting YRush rounds.
+    default: op
+  yrush.stop:
+    description: Allows stopping YRush rounds.
+    default: op
+  yrush.status:
+    description: Allows viewing YRush status.
+    default: true
+  yrush.setspawn:
+    description: Allows setting the YRush lobby spawn.
+    default: op
+

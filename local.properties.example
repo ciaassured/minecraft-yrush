@@ -1,0 +1,8 @@
+paperServerDir=/absolute/path/to/your/paper-server
+
+# Optional. Only needed if the server directory contains more than one Paper jar,
+# or if the jar name does not start with "paper".
+# paperServerJar=paper-1.21.11-130.jar
+
+# Optional. Defaults to "<paperServerDir>/plugins".
+# paperServerPluginsDir=/absolute/path/to/your/paper-server/plugins
