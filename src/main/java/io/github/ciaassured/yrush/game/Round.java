@@ -18,8 +18,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -51,6 +58,13 @@ import java.util.concurrent.CompletableFuture;
 public final class Round implements Listener, AutoCloseable {
     private static final int MAX_PREPARATION_ATTEMPTS = 20;
     private static final int PREPARATION_TIMEOUT_SECONDS = 60;
+    private static final int PRE_TELEPORT_DELAY_TICKS = 100;
+
+    private enum Phase {
+        PREPARING,
+        LOCKED_COUNTDOWN,
+        ACTIVE
+    }
 
     private final YRushPlugin plugin;
     private final YRushConfig config;
@@ -68,6 +82,7 @@ public final class Round implements Listener, AutoCloseable {
 
     // Set once preparation succeeds; immutable after that until launchRound stamps startedAt.
     private RoundContext context;
+    private Phase phase = Phase.PREPARING;
 
     // Task handles — owned entirely by this Round.
     private BukkitTask countdownTask;
@@ -75,6 +90,7 @@ public final class Round implements Listener, AutoCloseable {
     private BukkitTask winCheckTask;
     private BukkitTask timeoutTask;
     private BukkitTask preparationTimeoutTask;
+    private BukkitTask preTeleportTask;
     private CompletableFuture<?> preparationFuture;
 
     // Guards against double-close and stale async callbacks.
@@ -151,6 +167,8 @@ public final class Round implements Listener, AutoCloseable {
     void sendStatus(CommandSender sender) {
         if (context == null) {
             sender.sendMessage("YRush: preparing round (" + activePlayers.size() + " players)");
+        } else if (phase == Phase.LOCKED_COUNTDOWN) {
+            sender.sendMessage("YRush: countdown in progress");
         } else if (!context.hasStarted()) {
             sender.sendMessage("YRush: countdown in progress");
         } else {
@@ -236,15 +254,52 @@ public final class Round implements Listener, AutoCloseable {
         }
 
         context = prepared.get();
-        startCountdown();
+        announceAndScheduleTeleport();
     }
 
     // ── Countdown ───────────────────────────────────────────────────────────
 
+    private void announceAndScheduleTeleport() {
+        List<Player> players = onlineParticipants();
+        if (players.isEmpty()) {
+            finishRound(RoundResultType.DRAW, null);
+            return;
+        }
+
+        MessageService.roundStartingSoon(players);
+        preTeleportTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            preTeleportTask = null;
+            if (!disposed && phase == Phase.PREPARING) {
+                teleportAndLockPlayers();
+            }
+        }, PRE_TELEPORT_DELAY_TICKS);
+    }
+
+    private void teleportAndLockPlayers() {
+        List<Player> players = onlineParticipants();
+        if (players.isEmpty()) {
+            finishRound(RoundResultType.DRAW, null);
+            return;
+        }
+
+        List<Location> starts = context.playerStarts();
+        boolean waterStart = context.startCategory().isWater();
+
+        for (int i = 0; i < players.size(); i++) {
+            Player player = players.get(i);
+            PlayerStateService.resetForRound(player);
+            player.teleport(starts.get(i % starts.size()));
+            PlayerStateService.applyLockedCountdownEffects(player, config.countdownSeconds(), waterStart);
+        }
+
+        phase = Phase.LOCKED_COUNTDOWN;
+        startCountdown();
+    }
+
     private void startCountdown() {
         final int[] secondsRemaining = {config.countdownSeconds()};
         countdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (disposed) return;
+            if (disposed || phase != Phase.LOCKED_COUNTDOWN) return;
 
             List<Player> players = onlineParticipants();
             if (players.isEmpty()) {
@@ -253,7 +308,7 @@ public final class Round implements Listener, AutoCloseable {
             }
 
             if (secondsRemaining[0] <= 0) {
-                launchRound(players);
+                unlockAndStartRound(players);
                 return;
             }
 
@@ -264,15 +319,12 @@ public final class Round implements Listener, AutoCloseable {
 
     // ── Active round ─────────────────────────────────────────────────────────
 
-    private void launchRound(List<Player> players) {
+    private void unlockAndStartRound(List<Player> players) {
         cancelTask(countdownTask);
         countdownTask = null;
 
-        List<Location> starts = context.playerStarts();
-        for (int i = 0; i < players.size(); i++) {
-            Player player = players.get(i);
-            player.teleport(starts.get(i % starts.size()));
-            PlayerStateService.resetForRound(player);
+        for (Player player : players) {
+            PlayerStateService.clearLockedCountdownEffects(player);
             if (shouldGiveNightVision()) {
                 PlayerStateService.giveNightVision(player, config.timeoutSeconds());
             }
@@ -282,6 +334,7 @@ public final class Round implements Listener, AutoCloseable {
         }
 
         context = context.withStartedAt(Instant.now());
+        phase = Phase.ACTIVE;
         MessageService.roundStart(players, context);
         startActiveTasks();
     }
@@ -297,19 +350,19 @@ public final class Round implements Listener, AutoCloseable {
 
     private void startActiveTasks() {
         actionBarTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (disposed) return;
+            if (disposed || phase != Phase.ACTIVE) return;
             for (Player player : onlineParticipants()) {
                 MessageService.actionBar(player, context, activePlayers.size(), totalParticipants);
             }
         }, 0L, 20L);
 
         winCheckTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (disposed) return;
+            if (disposed || phase != Phase.ACTIVE) return;
             checkForWinner();
         }, 0L, 5L);
 
         timeoutTask = Bukkit.getScheduler().runTaskLater(plugin,
-            () -> { if (!disposed) finishRound(RoundResultType.DRAW, null); },
+            () -> { if (!disposed && phase == Phase.ACTIVE) finishRound(RoundResultType.DRAW, null); },
             Math.max(1L, context.timeoutSeconds()) * 20L
         );
     }
@@ -382,16 +435,77 @@ public final class Round implements Listener, AutoCloseable {
         }
     }
 
+    private boolean isLockedParticipant(Player player) {
+        return phase == Phase.LOCKED_COUNTDOWN && participants.contains(player.getUniqueId());
+    }
+
     // ── Events ───────────────────────────────────────────────────────────────
 
     @EventHandler
     public void onPlayerFatalDamage(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
         if (!activePlayers.contains(player.getUniqueId())) return;
+        if (phase == Phase.LOCKED_COUNTDOWN) {
+            event.setCancelled(true);
+            return;
+        }
+        if (phase != Phase.ACTIVE) return;
         if (player.getHealth() - event.getFinalDamage() > 0.0) return;
 
         event.setCancelled(true);
         eliminate(player);
+    }
+
+    @EventHandler
+    public void onParticipantAttack(EntityDamageByEntityEvent event) {
+        if (phase != Phase.LOCKED_COUNTDOWN) return;
+        if (event.getDamager() instanceof Player player && participants.contains(player.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onParticipantMove(PlayerMoveEvent event) {
+        if (phase != Phase.LOCKED_COUNTDOWN) return;
+        if (!participants.contains(event.getPlayer().getUniqueId())) return;
+
+        Location to = event.getTo();
+        if (to == null) return;
+
+        Location from = event.getFrom();
+        if (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ()) return;
+
+        Location locked = from.clone();
+        locked.setYaw(to.getYaw());
+        locked.setPitch(to.getPitch());
+        event.setTo(locked);
+    }
+
+    @EventHandler
+    public void onParticipantBreak(BlockBreakEvent event) {
+        if (isLockedParticipant(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onParticipantPlace(BlockPlaceEvent event) {
+        if (isLockedParticipant(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onParticipantInteract(PlayerInteractEvent event) {
+        if (isLockedParticipant(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onParticipantDrop(PlayerDropItemEvent event) {
+        if (isLockedParticipant(event.getPlayer())) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onParticipantInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player && isLockedParticipant(player)) {
+            event.setCancelled(true);
+        }
     }
 
     @EventHandler
@@ -447,10 +561,11 @@ public final class Round implements Listener, AutoCloseable {
         cancelTask(winCheckTask);
         cancelTask(timeoutTask);
         cancelTask(preparationTimeoutTask);
+        cancelTask(preTeleportTask);
         if (preparationFuture != null) {
             preparationFuture.cancel(false);
         }
-        countdownTask = actionBarTask = winCheckTask = timeoutTask = preparationTimeoutTask = null;
+        countdownTask = actionBarTask = winCheckTask = timeoutTask = preparationTimeoutTask = preTeleportTask = null;
         preparationFuture = null;
     }
 

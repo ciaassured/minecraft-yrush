@@ -27,6 +27,21 @@ public final class PlayerStateService {
         player.addPotionEffect(new PotionEffect(PotionEffectType.NIGHT_VISION, ticks, 0, false, false, true));
     }
 
+    public static void applyLockedCountdownEffects(Player player, int countdownSeconds, boolean waterStart) {
+        int ticks = Math.max(20, (countdownSeconds + 2) * 20);
+        player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, ticks, 0, false, false, false));
+        if (waterStart) {
+            player.addPotionEffect(new PotionEffect(PotionEffectType.WATER_BREATHING, ticks, 0, false, false, false));
+            resetAir(player);
+        }
+    }
+
+    public static void clearLockedCountdownEffects(Player player) {
+        player.removePotionEffect(PotionEffectType.BLINDNESS);
+        player.removePotionEffect(PotionEffectType.WATER_BREATHING);
+        resetAir(player);
+    }
+
     public static void restoreAfterRound(Player player, GameMode originalGameMode, Location lobby) {
         player.setGameMode(originalGameMode);
         clearInventory(player);
@@ -38,6 +53,10 @@ public final class PlayerStateService {
         resetVitals(player);
         player.setGameMode(GameMode.SPECTATOR);
         player.teleport(spectatorAnchor);
+    }
+
+    public static void resetAir(Player player) {
+        player.setRemainingAir(player.getMaximumAir());
     }
 
     private static void clearInventory(Player player) {
@@ -52,7 +71,7 @@ public final class PlayerStateService {
         }
         player.setFireTicks(0);
         player.setFallDistance(0);
-        player.setRemainingAir(player.getMaximumAir());
+        resetAir(player);
         player.setFoodLevel(20);
         player.setSaturation(20.0f);
         player.setExhaustion(0.0f);

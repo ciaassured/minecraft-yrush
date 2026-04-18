@@ -109,14 +109,19 @@ Single round flow:
    - random safe start location
    - nearby safe player spawn positions
    - random target Y
-5. The lobby countdown begins after preparation succeeds.
-6. At zero:
+5. After preparation succeeds:
+   - show players a center-screen "round starting soon" title
+   - wait briefly so players know the teleport is coming
    - teleport players to the random start
-   - immediately announce the target Y
+   - apply blindness and lock movement/actions while clients load the destination
+6. The countdown begins after players have been teleported and locked.
+7. At zero:
+   - remove blindness and unlock players
+   - announce the objective as direction plus blocks away, not the exact target Y
    - start win detection
-7. First active player to reach the target Y wins.
-8. Winner is announced.
-9. Players are reset and returned to lobby.
+8. First active player to reach the target Y wins.
+9. Winner is announced.
+10. Players are reset and returned to lobby.
 ```
 
 Auto mode flow:
@@ -281,21 +286,20 @@ On `/yrush stop` while idle:
 At round start, announce direction clearly:
 
 ```text
-CLIMB TO Y 180
-DIG DOWN TO Y -32
+CLIMB 42 BLOCKS
+DIG DOWN 37 BLOCKS
 ```
 
 During active rounds, show an actionbar with compact live stats, for example:
 
 ```text
-DIG DOWN TO Y -32 | Away 18 | Active 4/7 | 08:42
-CLIMB TO Y 180 | Away 27 | Active 4/7 | 08:42
+DIG DOWN | Away 18 | Active 4/7 | 08:42
+CLIMB | Away 27 | Active 4/7 | 08:42
 ```
 
 The actionbar should include:
 
 - Direction
-- Target Y
 - Blocks away from the target for that player
 - Active players remaining
 - Time remaining
@@ -346,6 +350,7 @@ Lifecycle responsibilities:
 - `GameController` should orchestrate high-level game state: start/stop/status/lobby, auto mode, between-round scheduling, and offline restore handoff.
 - `Round` owns all mutable state for a single round: participants, active/eliminated players, original game modes, preparation, countdown, active tasks, death/quit/join listeners, cleanup, and result emission.
 - `Round` implements `AutoCloseable`; `close()` must stay idempotent and safe from every path: stop command, plugin disable, preparation failure, win, draw, timeout, or all-eliminated draw.
+- `Round` should keep the post-teleport countdown locked: players are blind, cannot move/actions/damage, and are unlocked only when the active round starts.
 - `RoundCompletionHandler` is the handoff point from `Round` back to `GameController`.
 - `MessageService` and `PlayerStateService` are intentionally stateless utility services.
 

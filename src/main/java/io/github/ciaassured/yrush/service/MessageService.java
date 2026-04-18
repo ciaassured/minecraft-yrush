@@ -51,8 +51,21 @@ public final class MessageService {
         }
     }
 
+    public static void roundStartingSoon(Collection<Player> players) {
+        Component message = text("Get Ready", NamedTextColor.YELLOW);
+        Title title = Title.title(
+            message,
+            Component.empty(),
+            Title.Times.times(Duration.ZERO, Duration.ofMillis(4500), Duration.ofMillis(500))
+        );
+        for (Player player : players) {
+            player.showTitle(title);
+            player.sendActionBar(message);
+        }
+    }
+
     public static void roundStart(Collection<Player> players, RoundContext context) {
-        String objective = context.direction().titlePrefix() + " Y " + context.targetY();
+        String objective = objectiveDistance(context);
         Title title = Title.title(
             text(objective, NamedTextColor.GREEN),
             text("First player there wins", NamedTextColor.GRAY),
@@ -67,15 +80,25 @@ public final class MessageService {
     public static void actionBar(Player player, RoundContext context, int activePlayers, int totalPlayers) {
         long remaining = context.remainingSeconds(Instant.now());
         String time = "%02d:%02d".formatted(remaining / 60, remaining % 60);
-        String message = "%s Y %d | Away %d | Active %d/%d | %s".formatted(
-            context.direction().titlePrefix(),
-            context.targetY(),
+        String message = "%s | Away %d | Active %d/%d | %s".formatted(
+            objectiveVerb(context.direction()),
             blocksAway(player, context),
             activePlayers,
             totalPlayers,
             time
         );
         player.sendActionBar(text(message, NamedTextColor.AQUA));
+    }
+
+    private static String objectiveDistance(RoundContext context) {
+        return "%s %d BLOCKS".formatted(
+            objectiveVerb(context.direction()),
+            Math.abs(context.targetY() - context.startY())
+        );
+    }
+
+    private static String objectiveVerb(RoundDirection direction) {
+        return direction == RoundDirection.UP ? "CLIMB" : "DIG DOWN";
     }
 
     private static int blocksAway(Player player, RoundContext context) {
