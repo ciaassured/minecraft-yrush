@@ -114,7 +114,7 @@ public final class Round implements Listener, AutoCloseable {
         this.totalParticipants  = players.size();
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        MessageService.broadcast("YRush is starting! Searching for a start location...");
+        // MessageService.broadcast("YRush is starting! Searching for a start location...");
         startPreparation();
     }
 
