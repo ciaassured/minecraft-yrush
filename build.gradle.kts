@@ -5,7 +5,41 @@ plugins {
 import java.util.Properties
 
 group = "io.github.ciaassured"
-version = "1.1.1"
+version = gitVersion()
+
+fun gitVersion(): String {
+    val described = providers.exec {
+        commandLine("git", "describe", "--tags", "--dirty", "--always")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim()
+
+    if (described.isEmpty()) {
+        return "0.0.0-dev"
+    }
+
+    val dirty = described.endsWith("-dirty")
+    val clean = described.removeSuffix("-dirty")
+
+    val exactTag = Regex("""^v?(\d+\.\d+\.\d+)$""").matchEntire(clean)
+    if (exactTag != null) {
+        return withDirtySuffix(exactTag.groupValues[1], dirty)
+    }
+
+    val commitsAfterTag = Regex("""^v?(\d+\.\d+\.\d+)-(\d+)-g([0-9a-f]+)$""").matchEntire(clean)
+    if (commitsAfterTag != null) {
+        val baseVersion = commitsAfterTag.groupValues[1]
+        val commits = commitsAfterTag.groupValues[2]
+        val sha = commitsAfterTag.groupValues[3]
+        return withDirtySuffix("$baseVersion-dev.$commits+g$sha", dirty)
+    }
+
+    return withDirtySuffix("0.0.0-dev+g$clean", dirty)
+}
+
+fun withDirtySuffix(version: String, dirty: Boolean): String {
+    if (!dirty) return version
+    return if (version.contains("+")) "$version.dirty" else "$version+dirty"
+}
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
