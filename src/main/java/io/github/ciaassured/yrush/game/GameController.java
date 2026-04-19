@@ -88,6 +88,7 @@ public final class GameController implements Listener {
     }
 
     public void sendStatus(CommandSender sender) {
+        sender.sendMessage("YRush version: " + plugin.getPluginMeta().getVersion());
         if (currentRound != null) {
             currentRound.sendStatus(sender);
             sender.sendMessage("Auto mode: " + (autoMode ? "on" : "off"));

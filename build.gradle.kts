@@ -5,7 +5,7 @@ plugins {
 import java.util.Properties
 
 group = "io.github.ciaassured"
-version = "1.0.0"
+version = "1.1.1"
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
