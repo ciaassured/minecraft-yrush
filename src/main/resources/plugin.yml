@@ -8,7 +8,7 @@ description: Race to a random Y coordinate from random safe starts.
 commands:
   yrush:
     description: Controls the YRush minigame.
-    usage: /yrush <start|stop|status|setspawn>
+    usage: /yrush <start [auto|training]|stop|status|setspawn>
     permission: yrush.status
 
 permissions:
@@ -24,4 +24,3 @@ permissions:
   yrush.setspawn:
     description: Allows setting the YRush lobby spawn.
     default: op
-

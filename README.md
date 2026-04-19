@@ -14,6 +14,7 @@ Place the jar in your server's `plugins/` directory, then restart the server.
 | --- | --- |
 | `/yrush start` | Start one round. |
 | `/yrush start auto` | Start auto mode. A new round starts after each round ends. |
+| `/yrush start training` | Start fast repeating rounds for bot training. |
 | `/yrush stop` | Stop the current countdown, round, or auto mode. |
 | `/yrush status` | Show the current YRush state. |
 | `/yrush setspawn` | Set the lobby location used between rounds. If no lobby is configured, YRush uses the world's spawn location. |
@@ -39,6 +40,8 @@ For local Paper testing, create `local.properties` from `local.properties.exampl
 
 YRush can send round state to bot clients over a Paper plugin messaging channel.
 
+Use `/yrush start training` for fast repeating rounds with human-facing delays removed.
+
 Enable it in `config.yml`:
 
 ```yaml
@@ -52,7 +55,8 @@ Channel:
 yrush:training_state
 ```
 
-Payloads are UTF-8 JSON. The packet schema is versioned with `schema_version`.
+Clients must opt in by sending a plugin message on this channel before YRush sends packets to them.
+Payloads are raw UTF-8 JSON bytes. The packet schema is versioned with `schema_version`.
 
 Active round payload:
 

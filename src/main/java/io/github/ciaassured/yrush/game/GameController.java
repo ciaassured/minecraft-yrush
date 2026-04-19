@@ -17,6 +17,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
@@ -33,7 +34,7 @@ public final class GameController implements Listener {
     private final DebugService debug;
 
     private Round currentRound;
-    private boolean autoMode;
+    private RunMode runMode = RunMode.SINGLE;
     private BukkitTask betweenRoundsTask;
     private StartCategory lastStartCategory;
     private RoundResult lastResult;
@@ -49,13 +50,16 @@ public final class GameController implements Listener {
 
     // ── Commands ─────────────────────────────────────────────────────────────
 
-    public void start(CommandSender sender, boolean auto) {
+    public void start(CommandSender sender, RunMode requestedMode) {
         if (currentRound != null || betweenRoundsTask != null) {
             sender.sendMessage("YRush is already running.");
             return;
         }
-        autoMode = auto;
-        debug.log("Starting YRush. autoMode=" + auto);
+        runMode = requestedMode;
+        if (runMode.isTraining() && !YRushConfig.from(plugin.getConfig()).trainingPacketsEnabled()) {
+            sender.sendMessage("Training mode started. Training packets are disabled in config.yml.");
+        }
+        debug.log("Starting YRush. mode=" + runMode.label());
         launchRound(sender);
     }
 
@@ -64,7 +68,7 @@ public final class GameController implements Listener {
             sender.sendMessage("YRush is not currently running.");
             return;
         }
-        autoMode = false;
+        runMode = RunMode.SINGLE;
         cancelBetweenRoundsTask();
         if (currentRound != null) {
             debug.log("Stopping active round.");
@@ -79,7 +83,7 @@ public final class GameController implements Listener {
     }
 
     public void shutdown() {
-        autoMode = false;
+        runMode = RunMode.SINGLE;
         cancelBetweenRoundsTask();
         if (currentRound != null) {
             debug.log("Plugin shutdown closing active round.");
@@ -92,11 +96,12 @@ public final class GameController implements Listener {
         sender.sendMessage("YRush version: " + plugin.getPluginMeta().getVersion());
         if (currentRound != null) {
             currentRound.sendStatus(sender);
-            sender.sendMessage("Auto mode: " + (autoMode ? "on" : "off"));
+            sender.sendMessage("Mode: " + runMode.label());
+            sender.sendMessage("Training packets: " + (YRushConfig.from(plugin.getConfig()).trainingPacketsEnabled() ? "on" : "off"));
         } else if (betweenRoundsTask != null) {
-            sender.sendMessage("YRush: between rounds. Auto mode: on");
+            sender.sendMessage("YRush: between rounds. Mode: " + runMode.label());
         } else {
-            sender.sendMessage("YRush: idle. Auto mode: " + (autoMode ? "on" : "off"));
+            sender.sendMessage("YRush: idle. Mode: " + runMode.label());
             if (lastResult != null) sender.sendMessage("Last result: " + lastResult.type());
         }
     }
@@ -127,17 +132,18 @@ public final class GameController implements Listener {
 
         if (eligible.isEmpty()) {
             initiator.sendMessage("No eligible players found in the lobby world (must be in survival or adventure mode).");
-            debug.log("Round launch skipped: no eligible players. autoMode=" + autoMode);
-            if (autoMode) scheduleNextRound();
+            debug.log("Round launch skipped: no eligible players. mode=" + runMode.label());
+            if (runMode.isRepeating()) scheduleNextRound();
             return;
         }
 
         int roundId = nextRoundId++;
+        RoundOptions options = RoundOptions.from(config, runMode);
         debug.log("Launching round=" + roundId
             + " participants=" + eligible.size()
-            + " autoMode=" + autoMode
+            + " mode=" + runMode.label()
             + " lastStartCategory=" + lastStartCategory);
-        currentRound = new Round(plugin, roundId, eligible, config, lobby, lastStartCategory, debug, this::onRoundComplete);
+        currentRound = new Round(plugin, roundId, eligible, config, options, lobby, lastStartCategory, debug, this::onRoundComplete);
     }
 
     private void onRoundComplete(RoundResult result, Map<UUID, GameMode> offlineRestores, StartCategory categoryUsed) {
@@ -152,18 +158,18 @@ public final class GameController implements Listener {
             + " category=" + categoryUsed
             + " offlineRestores=" + offlineRestores.size());
 
-        if (autoMode) {
+        if (runMode.isRepeating()) {
             scheduleNextRound();
         }
     }
 
     private void scheduleNextRound() {
-        int delaySecs = YRushConfig.from(plugin.getConfig()).betweenRoundsSeconds();
-        debug.log("Scheduling next auto round in " + delaySecs + "s.");
+        long delayTicks = runMode.isTraining() ? 1L : YRushConfig.from(plugin.getConfig()).betweenRoundsSeconds() * 20L;
+        debug.log("Scheduling next " + runMode.label() + " round in " + delayTicks + " ticks.");
         betweenRoundsTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             betweenRoundsTask = null;
             launchRound(Bukkit.getConsoleSender());
-        }, delaySecs * 20L);
+        }, delayTicks);
     }
 
     private void cancelBetweenRoundsTask() {
@@ -192,6 +198,11 @@ public final class GameController implements Listener {
                 debug
             );
         });
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        TrainingStatePacketService.forget(event.getPlayer());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

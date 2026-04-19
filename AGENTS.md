@@ -22,6 +22,7 @@ V1 commands:
 ```text
 /yrush start
 /yrush start auto
+/yrush start training
 /yrush stop
 /yrush status
 /yrush setspawn
@@ -31,6 +32,7 @@ Command behavior:
 
 - `/yrush start` starts one round.
 - `/yrush start auto` starts auto mode. Rounds repeat until `/yrush stop`.
+- `/yrush start training` starts fast repeating rounds for bot training until `/yrush stop`.
 - `/yrush stop` cancels countdowns, active rounds, and pending auto rounds.
 - `/yrush status` reports the current YRush state.
 - `/yrush setspawn` stores the lobby location used between rounds.
@@ -139,6 +141,23 @@ Auto mode flow:
 4. Wait round.between-rounds-seconds.
 5. Start the next countdown.
 6. Repeat until /yrush stop.
+```
+
+Training mode flow:
+
+```text
+1. A player runs /yrush start training.
+2. Rounds repeat until /yrush stop.
+3. Start search, target selection, teleport/reset, win, death, draw, and cleanup rules stay the same as normal rounds.
+4. Human-facing pacing is removed:
+   - no Get Ready title
+   - no pre-teleport delay
+   - no visible countdown titles
+   - no round-start title/chat
+   - no actionbar updates
+5. Players are still teleported into a locked countdown state for 1 tick, then unlocked.
+6. Send training packets for LOCKED_COUNTDOWN, ACTIVE, elimination, and INACTIVE transitions.
+7. Schedule the next round 1 tick after cleanup.
 ```
 
 ## Target Y Rules
@@ -325,7 +344,8 @@ training-packets:
   enabled: false
 ```
 
-Payloads are UTF-8 JSON and must include `schema_version`.
+Clients must opt in by sending a plugin message on this channel before YRush sends packets to them.
+Payloads are raw UTF-8 JSON bytes and must include `schema_version`.
 
 Active or locked-countdown payload:
 
@@ -348,6 +368,7 @@ Inactive payload:
 Packet rules:
 
 - `phase` is `LOCKED_COUNTDOWN`, `ACTIVE`, or `INACTIVE`.
+- Send only to players whose client has opted in by sending a plugin message on `yrush:training_state`.
 - Send `LOCKED_COUNTDOWN` after players are teleported and locked.
 - Send `ACTIVE` when the round unlocks and once per second during active play.
 - Send `player_active=false` to a player when they are eliminated.
@@ -373,6 +394,8 @@ config/
 game/
   GameController              high-level orchestration, auto mode, lobby, status
   Round                       owns one complete round lifecycle
+  RunMode                     single, auto, or training run mode
+  RoundOptions                timing and human-facing output profile for a round
   RoundCompletionHandler      callback from Round to GameController
   RoundContext                immutable round setup/runtime context
   RoundResult                 round completion result model

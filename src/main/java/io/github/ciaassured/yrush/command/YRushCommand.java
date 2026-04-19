@@ -1,6 +1,7 @@
 package io.github.ciaassured.yrush.command;
 
 import io.github.ciaassured.yrush.game.GameController;
+import io.github.ciaassured.yrush.game.RunMode;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -55,14 +56,14 @@ public final class YRushCommand implements CommandExecutor, TabCompleter {
 
         if (args.length == 2 && Subcommand.START.matches(args[0]) && sender.hasPermission(Subcommand.START.permission)) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
-            return List.of("auto").stream().filter(s -> s.startsWith(prefix)).toList();
+            return List.of("auto", "training").stream().filter(s -> s.startsWith(prefix)).toList();
         }
 
         return List.of();
     }
 
     private void sendUsage(CommandSender sender) {
-        sender.sendMessage("Usage: /yrush <start [auto]|stop|status|setspawn>");
+        sender.sendMessage("Usage: /yrush <start [auto|training]|stop|status|setspawn>");
     }
 
     // ── Dispatch table ────────────────────────────────────────────────────────
@@ -70,7 +71,12 @@ public final class YRushCommand implements CommandExecutor, TabCompleter {
     private enum Subcommand {
         START("start", "yrush.start") {
             @Override void execute(GameController gc, CommandSender sender, String[] args) {
-                gc.start(sender, args.length > 1 && args[1].equalsIgnoreCase("auto"));
+                Optional<RunMode> mode = runMode(args);
+                if (mode.isEmpty()) {
+                    sender.sendMessage("Usage: /yrush start [auto|training]");
+                    return;
+                }
+                gc.start(sender, mode.get());
             }
         },
         STOP("stop", "yrush.stop") {
@@ -98,6 +104,14 @@ public final class YRushCommand implements CommandExecutor, TabCompleter {
         }
 
         abstract void execute(GameController gc, CommandSender sender, String[] args);
+
+        private static Optional<RunMode> runMode(String[] args) {
+            if (args.length <= 1) return Optional.of(RunMode.SINGLE);
+            if (args.length > 2) return Optional.empty();
+            if (args[1].equalsIgnoreCase("auto")) return Optional.of(RunMode.AUTO);
+            if (args[1].equalsIgnoreCase("training")) return Optional.of(RunMode.TRAINING);
+            return Optional.empty();
+        }
 
         boolean matches(String input) {
             return name.equalsIgnoreCase(input);

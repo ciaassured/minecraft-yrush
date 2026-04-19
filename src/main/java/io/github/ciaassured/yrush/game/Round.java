@@ -60,7 +60,6 @@ import java.util.concurrent.CompletableFuture;
 public final class Round implements Listener, AutoCloseable {
     private static final int MAX_PREPARATION_ATTEMPTS = 20;
     private static final int PREPARATION_TIMEOUT_SECONDS = 60;
-    private static final int PRE_TELEPORT_DELAY_TICKS = 100;
 
     private enum Phase {
         PREPARING,
@@ -71,6 +70,7 @@ public final class Round implements Listener, AutoCloseable {
     private final YRushPlugin plugin;
     private final int roundId;
     private final YRushConfig config;
+    private final RoundOptions options;
     private final Location lobby;
     private final DebugService debug;
     private final RoundCompletionHandler onComplete;
@@ -108,6 +108,7 @@ public final class Round implements Listener, AutoCloseable {
         int roundId,
         List<Player> players,
         YRushConfig config,
+        RoundOptions options,
         Location lobby,
         StartCategory lastStartCategory,
         DebugService debug,
@@ -116,6 +117,7 @@ public final class Round implements Listener, AutoCloseable {
         this.plugin = plugin;
         this.roundId = roundId;
         this.config = config;
+        this.options = options;
         this.lobby = lobby;
         this.debug = debug;
         this.onComplete = onComplete;
@@ -142,6 +144,9 @@ public final class Round implements Listener, AutoCloseable {
             + " radius=" + config.startRadius()
             + " countdownSeconds=" + config.countdownSeconds()
             + " timeoutSeconds=" + config.timeoutSeconds()
+            + " mode=" + options.runMode().label()
+            + " preTeleportDelayTicks=" + options.preTeleportDelayTicks()
+            + " lockedCountdownTicks=" + options.lockedCountdownTicks()
             + " trainingPacketsEnabled=" + config.trainingPacketsEnabled()
             + " lastStartCategory=" + lastStartCategory);
         startPreparation();
@@ -297,14 +302,17 @@ public final class Round implements Listener, AutoCloseable {
             return;
         }
 
-        MessageService.roundStartingSoon(players);
-        debug("Get Ready shown. teleportDelayTicks=" + PRE_TELEPORT_DELAY_TICKS);
+        if (options.showGetReadyMessage()) {
+            MessageService.roundStartingSoon(players);
+        }
+        debug("Teleport scheduled. teleportDelayTicks=" + options.preTeleportDelayTicks()
+            + " showGetReadyMessage=" + options.showGetReadyMessage());
         preTeleportTask = Bukkit.getScheduler().runTaskLater(plugin, () -> {
             preTeleportTask = null;
             if (!disposed && phase == Phase.PREPARING) {
                 teleportAndLockPlayers();
             }
-        }, PRE_TELEPORT_DELAY_TICKS);
+        }, options.preTeleportDelayTicks());
     }
 
     private void teleportAndLockPlayers() {
@@ -321,19 +329,19 @@ public final class Round implements Listener, AutoCloseable {
             Player player = players.get(i);
             PlayerStateService.resetForRound(player);
             player.teleport(starts.get(i % starts.size()));
-            PlayerStateService.applyLockedCountdownEffects(player, config.countdownSeconds(), waterStart);
+            PlayerStateService.applyLockedCountdownEffects(player, options.lockedCountdownEffectSeconds(), waterStart);
         }
 
         phase = Phase.LOCKED_COUNTDOWN;
         debug("Players teleported and locked. players=" + players.size()
             + " waterStart=" + waterStart
-            + " countdownSeconds=" + config.countdownSeconds());
-        sendTrainingStateToPlayers(players, Phase.LOCKED_COUNTDOWN, config.countdownSeconds());
+            + " countdownTicks=" + options.lockedCountdownTicks());
+        sendTrainingStateToPlayers(players, Phase.LOCKED_COUNTDOWN, remainingCountdownSeconds(options.lockedCountdownTicks()));
         startCountdown();
     }
 
     private void startCountdown() {
-        final int[] secondsRemaining = {config.countdownSeconds()};
+        final int[] ticksRemaining = {options.lockedCountdownTicks()};
         countdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (disposed || phase != Phase.LOCKED_COUNTDOWN) return;
 
@@ -343,14 +351,16 @@ public final class Round implements Listener, AutoCloseable {
                 return;
             }
 
-            if (secondsRemaining[0] <= 0) {
+            if (ticksRemaining[0] <= 0) {
                 unlockAndStartRound(players);
                 return;
             }
 
-            MessageService.countdown(players, secondsRemaining[0]);
-            secondsRemaining[0]--;
-        }, 0L, 20L);
+            if (options.showCountdownMessages() && ticksRemaining[0] % 20 == 0) {
+                MessageService.countdown(players, remainingCountdownSeconds(ticksRemaining[0]));
+            }
+            ticksRemaining[0]--;
+        }, 0L, 1L);
     }
 
     // ── Active round ─────────────────────────────────────────────────────────
@@ -375,7 +385,9 @@ public final class Round implements Listener, AutoCloseable {
             + " distance=" + Math.abs(context.targetY() - context.startY())
             + " targetY=" + context.targetY()
             + " activePlayers=" + activePlayers.size());
-        MessageService.roundStart(players, context);
+        if (options.showRoundStartMessages()) {
+            MessageService.roundStart(players, context);
+        }
         sendTrainingStateToPlayers(players, Phase.ACTIVE, context.remainingSeconds(Instant.now()));
         startActiveTasks();
     }
@@ -394,7 +406,9 @@ public final class Round implements Listener, AutoCloseable {
             if (disposed || phase != Phase.ACTIVE) return;
             long secondsRemaining = context.remainingSeconds(Instant.now());
             for (Player player : onlineParticipants()) {
-                MessageService.actionBar(player, context, activePlayers.size(), totalParticipants);
+                if (options.showActionBar()) {
+                    MessageService.actionBar(player, context, activePlayers.size(), totalParticipants);
+                }
                 sendTrainingState(player, Phase.ACTIVE, activePlayers.contains(player.getUniqueId()), secondsRemaining);
             }
         }, 0L, 20L);
@@ -641,6 +655,10 @@ public final class Round implements Listener, AutoCloseable {
         for (Player player : onlineParticipants()) {
             TrainingStatePacketService.sendInactive(plugin, config.trainingPacketsEnabled(), player, debug);
         }
+    }
+
+    private int remainingCountdownSeconds(int ticksRemaining) {
+        return Math.max(1, (int) Math.ceil(ticksRemaining / 20.0));
     }
 
     private void cancelAllTasks() {
