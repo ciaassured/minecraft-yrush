@@ -6,6 +6,7 @@ import io.github.ciaassured.yrush.location.StartCategory;
 import io.github.ciaassured.yrush.service.DebugService;
 import io.github.ciaassured.yrush.service.MessageService;
 import io.github.ciaassured.yrush.service.PlayerStateService;
+import io.github.ciaassured.yrush.service.TrainingStatePacketService;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -182,8 +183,15 @@ public final class GameController implements Listener {
         if (original == null) return;
         debug.log("Restoring offline participant on join. player=" + player.getName());
         // Defer one tick so join processing finishes before we teleport/restore.
-        Bukkit.getScheduler().runTask(plugin,
-            () -> PlayerStateService.restoreAfterRound(player, original, getLobbyLocation()));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            PlayerStateService.restoreAfterRound(player, original, getLobbyLocation());
+            TrainingStatePacketService.sendInactive(
+                plugin,
+                YRushConfig.from(plugin.getConfig()).trainingPacketsEnabled(),
+                player,
+                debug
+            );
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

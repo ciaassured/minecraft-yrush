@@ -8,7 +8,8 @@ public record YRushConfig(
     int timeoutSeconds,
     int targetMinimumDistance,
     int targetMaximumDistance,
-    int startRadius
+    int startRadius,
+    boolean trainingPacketsEnabled
 ) {
     public static YRushConfig from(FileConfiguration config) {
         int minDistance = Math.max(1, config.getInt("target-y.minimum-distance", 10));
@@ -20,7 +21,8 @@ public record YRushConfig(
             Math.max(10, config.getInt("round.timeout-seconds", 600)),
             minDistance,
             maxDistance,
-            Math.max(100, config.getInt("start-location.radius", 3000))
+            Math.max(100, config.getInt("start-location.radius", 3000)),
+            config.getBoolean("training-packets.enabled", false)
         );
     }
 }

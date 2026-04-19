@@ -34,3 +34,42 @@ For local Paper testing, create `local.properties` from `local.properties.exampl
 - If nobody reaches the target before the timeout, the round is a draw.
 - Night vision is given for underground starts or dig-down targets.
 - A wooden pickaxe is given for underground starts.
+
+## Bot Training State
+
+YRush can send round state to bot clients over a Paper plugin messaging channel.
+
+Enable it in `config.yml`:
+
+```yaml
+training-packets:
+  enabled: true
+```
+
+Channel:
+
+```text
+yrush:training_state
+```
+
+Payloads are UTF-8 JSON. The packet schema is versioned with `schema_version`.
+
+Active round payload:
+
+```json
+{"schema_version":1,"round_active":true,"player_active":true,"phase":"ACTIVE","direction":"DOWN","target_y":39,"active_players":3,"total_players":5,"seconds_remaining":482}
+```
+
+Eliminated player payload:
+
+```json
+{"schema_version":1,"round_active":true,"player_active":false,"phase":"ACTIVE","direction":"DOWN","target_y":39,"active_players":2,"total_players":5,"seconds_remaining":421}
+```
+
+Inactive payload:
+
+```json
+{"schema_version":1,"round_active":false,"player_active":false,"phase":"INACTIVE"}
+```
+
+`phase` is `LOCKED_COUNTDOWN`, `ACTIVE`, or `INACTIVE`.

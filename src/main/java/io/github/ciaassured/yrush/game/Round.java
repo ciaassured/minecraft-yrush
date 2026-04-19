@@ -10,6 +10,7 @@ import io.github.ciaassured.yrush.location.TargetYSelector;
 import io.github.ciaassured.yrush.service.DebugService;
 import io.github.ciaassured.yrush.service.MessageService;
 import io.github.ciaassured.yrush.service.PlayerStateService;
+import io.github.ciaassured.yrush.service.TrainingStatePacketService;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -141,6 +142,7 @@ public final class Round implements Listener, AutoCloseable {
             + " radius=" + config.startRadius()
             + " countdownSeconds=" + config.countdownSeconds()
             + " timeoutSeconds=" + config.timeoutSeconds()
+            + " trainingPacketsEnabled=" + config.trainingPacketsEnabled()
             + " lastStartCategory=" + lastStartCategory);
         startPreparation();
     }
@@ -161,9 +163,11 @@ public final class Round implements Listener, AutoCloseable {
         disposed = true;
 
         debug("Closing round. phase=" + phase);
+        sendInactiveTrainingStateToParticipants();
         HandlerList.unregisterAll(this);
         cancelAllTasks();
         offlineRestores = restorePlayers();
+        sendInactiveTrainingStateToParticipants();
         debug("Round closed. offlineRestores=" + offlineRestores.size());
     }
 
@@ -324,6 +328,7 @@ public final class Round implements Listener, AutoCloseable {
         debug("Players teleported and locked. players=" + players.size()
             + " waterStart=" + waterStart
             + " countdownSeconds=" + config.countdownSeconds());
+        sendTrainingStateToPlayers(players, Phase.LOCKED_COUNTDOWN, config.countdownSeconds());
         startCountdown();
     }
 
@@ -371,6 +376,7 @@ public final class Round implements Listener, AutoCloseable {
             + " targetY=" + context.targetY()
             + " activePlayers=" + activePlayers.size());
         MessageService.roundStart(players, context);
+        sendTrainingStateToPlayers(players, Phase.ACTIVE, context.remainingSeconds(Instant.now()));
         startActiveTasks();
     }
 
@@ -386,8 +392,10 @@ public final class Round implements Listener, AutoCloseable {
     private void startActiveTasks() {
         actionBarTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (disposed || phase != Phase.ACTIVE) return;
+            long secondsRemaining = context.remainingSeconds(Instant.now());
             for (Player player : onlineParticipants()) {
                 MessageService.actionBar(player, context, activePlayers.size(), totalParticipants);
+                sendTrainingState(player, Phase.ACTIVE, activePlayers.contains(player.getUniqueId()), secondsRemaining);
             }
         }, 0L, 20L);
 
@@ -466,6 +474,7 @@ public final class Round implements Listener, AutoCloseable {
 
         debug("Player eliminated. player=" + player.getName()
             + " activePlayers=" + activePlayers.size());
+        sendTrainingState(player, Phase.ACTIVE, false, context == null ? 0L : context.remainingSeconds(Instant.now()));
         if (context != null) {
             PlayerStateService.eliminateToSpectator(player, context.startCenter());
         }
@@ -574,8 +583,10 @@ public final class Round implements Listener, AutoCloseable {
 
         if (eliminatedPlayers.contains(id) && context != null) {
             // Reconnecting eliminated player — put them back in spectator.
-            Bukkit.getScheduler().runTask(plugin,
-                () -> PlayerStateService.eliminateToSpectator(player, context.startCenter()));
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                PlayerStateService.eliminateToSpectator(player, context.startCenter());
+                sendTrainingState(player, Phase.ACTIVE, false, context.remainingSeconds(Instant.now()));
+            });
         }
     }
 
@@ -602,6 +613,34 @@ public final class Round implements Listener, AutoCloseable {
 
     private void debug(String message) {
         debug.log("round=" + roundId + " " + message);
+    }
+
+    private void sendTrainingStateToPlayers(List<Player> players, Phase packetPhase, long secondsRemaining) {
+        for (Player player : players) {
+            sendTrainingState(player, packetPhase, activePlayers.contains(player.getUniqueId()), secondsRemaining);
+        }
+    }
+
+    private void sendTrainingState(Player player, Phase packetPhase, boolean playerActive, long secondsRemaining) {
+        if (context == null) return;
+        TrainingStatePacketService.sendRoundState(
+            plugin,
+            config.trainingPacketsEnabled(),
+            player,
+            context,
+            packetPhase.name(),
+            playerActive,
+            activePlayers.size(),
+            totalParticipants,
+            secondsRemaining,
+            debug
+        );
+    }
+
+    private void sendInactiveTrainingStateToParticipants() {
+        for (Player player : onlineParticipants()) {
+            TrainingStatePacketService.sendInactive(plugin, config.trainingPacketsEnabled(), player, debug);
+        }
     }
 
     private void cancelAllTasks() {

@@ -10,5 +10,8 @@ target-y:
 start-location:
   radius: 3000
 
+training-packets:
+  enabled: false
+
 debug:
   enabled: false

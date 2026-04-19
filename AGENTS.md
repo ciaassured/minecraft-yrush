@@ -63,6 +63,9 @@ target-y:
 start-location:
   radius: 3000
 
+training-packets:
+  enabled: false
+
 debug:
   enabled: false
 ```
@@ -307,6 +310,50 @@ The actionbar should include:
 - Active players remaining
 - Time remaining
 
+## Bot Training Packets
+
+YRush can send state packets for bot clients over the Paper plugin messaging channel:
+
+```text
+yrush:training_state
+```
+
+This is disabled by default:
+
+```yaml
+training-packets:
+  enabled: false
+```
+
+Payloads are UTF-8 JSON and must include `schema_version`.
+
+Active or locked-countdown payload:
+
+```json
+{"schema_version":1,"round_active":true,"player_active":true,"phase":"ACTIVE","direction":"DOWN","target_y":39,"active_players":3,"total_players":5,"seconds_remaining":482}
+```
+
+Eliminated player payload:
+
+```json
+{"schema_version":1,"round_active":true,"player_active":false,"phase":"ACTIVE","direction":"DOWN","target_y":39,"active_players":2,"total_players":5,"seconds_remaining":421}
+```
+
+Inactive payload:
+
+```json
+{"schema_version":1,"round_active":false,"player_active":false,"phase":"INACTIVE"}
+```
+
+Packet rules:
+
+- `phase` is `LOCKED_COUNTDOWN`, `ACTIVE`, or `INACTIVE`.
+- Send `LOCKED_COUNTDOWN` after players are teleported and locked.
+- Send `ACTIVE` when the round unlocks and once per second during active play.
+- Send `player_active=false` to a player when they are eliminated.
+- Send `round_active=false`/`INACTIVE` when a round finishes, stops, or cleans up.
+- Treat packet delivery as best-effort. Missing bot listeners must not affect gameplay.
+
 ## Architecture And State Management
 
 The project has been refactored around explicit object ownership and separation of concerns. Preserve this structure when making changes.
@@ -344,6 +391,7 @@ location/
 service/
   MessageService              stateless message/title/actionbar helpers
   PlayerStateService          stateless player reset/restore helpers
+  TrainingStatePacketService  stateless bot training packet helpers
 ```
 
 Lifecycle responsibilities:
