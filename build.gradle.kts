@@ -131,12 +131,24 @@ fun paperServerJar(): File {
 
 tasks.register<Copy>("deployPlugin") {
     group = "deployment"
-    description = "Builds YRush and copies the plugin jar to the local Paper plugins folder."
+    description = "Builds YRush, removes old deployed YRush jars, and copies the plugin jar to the local Paper plugins folder."
 
     dependsOn(tasks.named("build"))
 
     from(tasks.named<Jar>("jar").flatMap { it.archiveFile })
     into(providers.provider { paperPluginsDir() })
+
+    doFirst {
+        val pluginsDir = paperPluginsDir()
+        pluginsDir.listFiles { file ->
+            file.isFile && file.name.matches(Regex("(?i)yrush.*\\.jar"))
+        }?.forEach { file ->
+            if (!file.delete()) {
+                throw GradleException("Could not delete old YRush jar: ${file.absolutePath}")
+            }
+            logger.lifecycle("Deleted old YRush jar: ${file.absolutePath}")
+        }
+    }
 }
 
 tasks.register<Exec>("runPaperServer") {
