@@ -1,7 +1,7 @@
 name: YRush
 version: ${version}
 main: io.github.ciaassured.yrush.YRushPlugin
-api-version: '1.21'
+api-version: '26.2'
 author: CIA Assured
 description: Race to a random Y coordinate from random safe starts.
 

@@ -41,25 +41,27 @@ fun withDirtySuffix(version: String, dirty: Boolean): String {
     return if (version.contains("+")) "$version.dirty" else "$version+dirty"
 }
 
-dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+val paperApiVersion = "26.2.build.112-stable"
 
-    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+dependencies {
+    compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
+
+    testImplementation("io.papermc.paper:paper-api:$paperApiVersion")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.mockito:mockito-core:5.20.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.release.set(21)
+    options.release.set(25)
 }
 
 tasks.test {

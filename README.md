@@ -2,6 +2,8 @@
 
 YRush is a Paper Minecraft server plugin for a simple race minigame: players start together, get sent to a random location, and race to reach a random Y coordinate first.
 
+YRush requires Paper 26.2 or newer and Java 25 or newer.
+
 ## Download
 
 Download the latest plugin jar from the GitHub Releases page.
