@@ -172,7 +172,6 @@ public final class Round implements Listener, AutoCloseable {
         HandlerList.unregisterAll(this);
         cancelAllTasks();
         offlineRestores = restorePlayers();
-        sendInactiveTrainingStateToParticipants();
         debug("Round closed. offlineRestores=" + offlineRestores.size());
     }
 
@@ -402,6 +401,12 @@ public final class Round implements Listener, AutoCloseable {
     }
 
     private void startActiveTasks() {
+        if (options.showActionBar()) {
+            for (Player player : onlineParticipants()) {
+                MessageService.actionBar(player, context, activePlayers.size(), totalParticipants);
+            }
+        }
+
         actionBarTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (disposed || phase != Phase.ACTIVE) return;
             long secondsRemaining = context.remainingSeconds(Instant.now());
@@ -411,7 +416,7 @@ public final class Round implements Listener, AutoCloseable {
                 }
                 sendTrainingState(player, Phase.ACTIVE, activePlayers.contains(player.getUniqueId()), secondsRemaining);
             }
-        }, 0L, 20L);
+        }, 20L, 20L);
 
         winCheckTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (disposed || phase != Phase.ACTIVE) return;
