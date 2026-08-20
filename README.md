@@ -40,8 +40,6 @@ For local Paper testing, create `local.properties` from `local.properties.exampl
 
 YRush can send round state to bot clients over a Paper plugin messaging channel.
 
-Use `/yrush start training` for fast repeating rounds with human-facing delays removed.
-
 Enable it in `config.yml`:
 
 ```yaml
@@ -76,4 +74,8 @@ Inactive payload:
 {"schema_version":1,"round_active":false,"player_active":false,"phase":"INACTIVE"}
 ```
 
-`phase` is `LOCKED_COUNTDOWN`, `ACTIVE`, or `INACTIVE`.
+| Phase              | Description                                                      |
+|--------------------|------------------------------------------------------------------|
+| `LOCKED_COUNTDOWN` | Players are at the start but locked while the countdown runs.    |
+| `ACTIVE`           | The race is running and eligible players can move, act, and win. |
+| `INACTIVE`         | No round is active; sent after completion, stopping, or cleanup. |
