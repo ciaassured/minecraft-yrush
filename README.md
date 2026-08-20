@@ -53,7 +53,8 @@ Channel:
 yrush:training_state
 ```
 
-Clients must opt in by sending a plugin message on this channel before YRush sends packets to them.
+Clients opt in by registering a receiver for this channel. YRush sends packets only while the
+client advertises `yrush:training_state` as a listening plugin channel; no subscription message is required.
 Payloads are raw UTF-8 JSON bytes. The packet schema is versioned with `schema_version`.
 
 Active round payload:

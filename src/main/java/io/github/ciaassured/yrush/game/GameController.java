@@ -17,7 +17,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
@@ -198,11 +197,6 @@ public final class GameController implements Listener {
                 debug
             );
         });
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        TrainingStatePacketService.forget(event.getPlayer());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
