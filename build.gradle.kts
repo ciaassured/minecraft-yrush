@@ -11,7 +11,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
 
     testImplementation("io.papermc.paper:paper-api:$paperApiVersion")
-    testImplementation(platform("org.junit:junit-bom:5.10.2"))
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.mockito:mockito-core:5.23.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
