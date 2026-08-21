@@ -6,7 +6,7 @@ import io.github.ciaassured.yrush.location.StartCategory;
 import io.github.ciaassured.yrush.service.DebugService;
 import io.github.ciaassured.yrush.service.MessageService;
 import io.github.ciaassured.yrush.service.PlayerStateService;
-import io.github.ciaassured.yrush.service.TrainingStatePacketService;
+import io.github.ciaassured.yrush.service.BotStatePacketService;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -55,9 +55,6 @@ public final class GameController implements Listener {
             return;
         }
         runMode = requestedMode;
-        if (runMode.isTraining() && !YRushConfig.from(plugin.getConfig()).trainingPacketsEnabled()) {
-            sender.sendMessage("Training mode started. Training packets are disabled in config.yml.");
-        }
         debug.log("Starting YRush. mode=" + runMode.label());
         launchRound(sender);
     }
@@ -96,7 +93,7 @@ public final class GameController implements Listener {
         if (currentRound != null) {
             currentRound.sendStatus(sender);
             sender.sendMessage("Mode: " + runMode.label());
-            sender.sendMessage("Training packets: " + (YRushConfig.from(plugin.getConfig()).trainingPacketsEnabled() ? "on" : "off"));
+            sender.sendMessage("Bot packets: " + (YRushConfig.from(plugin.getConfig()).botPacketsEnabled() ? "on" : "off"));
         } else if (betweenRoundsTask != null) {
             sender.sendMessage("YRush: between rounds. Mode: " + runMode.label());
         } else {
@@ -190,9 +187,9 @@ public final class GameController implements Listener {
         // Defer one tick so join processing finishes before we teleport/restore.
         Bukkit.getScheduler().runTask(plugin, () -> {
             PlayerStateService.restoreAfterRound(player, original, getLobbyLocation());
-            TrainingStatePacketService.sendInactive(
+            BotStatePacketService.sendInactive(
                 plugin,
-                YRushConfig.from(plugin.getConfig()).trainingPacketsEnabled(),
+                YRushConfig.from(plugin.getConfig()).botPacketsEnabled(),
                 player,
                 debug
             );

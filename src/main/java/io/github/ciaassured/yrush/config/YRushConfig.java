@@ -9,7 +9,7 @@ public record YRushConfig(
     int targetMinimumDistance,
     int targetMaximumDistance,
     int startRadius,
-    boolean trainingPacketsEnabled
+    boolean botPacketsEnabled
 ) {
     public static YRushConfig from(FileConfiguration config) {
         int minDistance = Math.max(1, config.getInt("target-y.minimum-distance", 10));
@@ -22,7 +22,7 @@ public record YRushConfig(
             minDistance,
             maxDistance,
             Math.max(100, config.getInt("start-location.radius", 3000)),
-            config.getBoolean("training-packets.enabled", false)
+            config.getBoolean("bot-packets.enabled", false)
         );
     }
 }

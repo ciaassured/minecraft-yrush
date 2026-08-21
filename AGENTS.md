@@ -65,7 +65,7 @@ target-y:
 start-location:
   radius: 3000
 
-training-packets:
+bot-packets:
   enabled: false
 
 debug:
@@ -156,7 +156,7 @@ Training mode flow:
    - no round-start title/chat
    - no actionbar updates
 5. Players are still teleported into a locked countdown state for 1 tick, then unlocked.
-6. Send training packets for LOCKED_COUNTDOWN, ACTIVE, elimination, and INACTIVE transitions.
+6. Send bot packets for LOCKED_COUNTDOWN, ACTIVE, elimination, and INACTIVE transitions, just as in single and auto modes.
 7. Schedule the next round 1 tick after cleanup.
 ```
 
@@ -329,22 +329,23 @@ The actionbar should include:
 - Active players remaining
 - Time remaining
 
-## Bot Training Packets
+## Bot Packets
 
 YRush can send state packets for bot clients over the Paper plugin messaging channel:
 
 ```text
-yrush:training_state
+yrush:bot_state
 ```
 
 This is disabled by default:
 
 ```yaml
-training-packets:
+bot-packets:
   enabled: false
 ```
 
-Clients must opt in by sending a plugin message on this channel before YRush sends packets to them.
+All run modes—single, auto, and training—emit packets when enabled.
+Clients opt in by advertising this channel as a listening plugin channel before YRush sends packets to them.
 Payloads are raw UTF-8 JSON bytes and must include `schema_version`.
 
 Active or locked-countdown payload:
@@ -368,7 +369,7 @@ Inactive payload:
 Packet rules:
 
 - `phase` is `LOCKED_COUNTDOWN`, `ACTIVE`, or `INACTIVE`.
-- Send only to players whose client has opted in by sending a plugin message on `yrush:training_state`.
+- Send only to players whose client advertises `yrush:bot_state` as a listening plugin channel.
 - Send `LOCKED_COUNTDOWN` after players are teleported and locked.
 - Send `ACTIVE` when the round unlocks and once per second during active play.
 - Send `player_active=false` to a player when they are eliminated.
@@ -414,7 +415,7 @@ location/
 service/
   MessageService              stateless message/title/actionbar helpers
   PlayerStateService          stateless player reset/restore helpers
-  TrainingStatePacketService  stateless bot training packet helpers
+  BotStatePacketService       stateless bot packet helpers
 ```
 
 Lifecycle responsibilities:

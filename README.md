@@ -32,7 +32,7 @@ Place the jar in your server's `plugins/` directory, then restart the server.
 | `nix fmt`              | Format the Nix sources with nixfmt.                                          |
 
 The Paper runner keeps local state in `.yrush-paper/`; set `YRUSH_PAPER_STATE_DIR` to override
-that location. It binds to localhost and uses offline mode with training packets and debug logging
+that location. It binds to localhost and uses offline mode with bot packets and debug logging
 enabled.
 
 After changing Gradle dependencies, refresh their Nix hashes with
@@ -45,26 +45,27 @@ After changing Gradle dependencies, refresh their Nix hashes with
 - Night vision is given for underground starts or dig-down targets.
 - A wooden pickaxe is given for underground starts.
 
-## Bot Training State
+## Bot State Packets
 
 YRush can send round state to bot clients over a Paper plugin messaging channel.
+All run modes—single, auto, and training—emit these packets when they are enabled.
 
 Enable it in `config.yml`:
 
 ```yaml
-training-packets:
+bot-packets:
   enabled: true
 ```
 
 Channel:
 
 ```text
-yrush:training_state
+yrush:bot_state
 ```
 
 Clients opt in by registering a receiver for this channel. YRush sends packets only while the
-client advertises `yrush:training_state` as a listening plugin channel; no subscription message is required.
-Payloads are raw UTF-8 JSON bytes. The packet schema is versioned with `schema_version`.
+client advertises `yrush:bot_state` as a listening plugin channel; no subscription message is
+required. Payloads are raw UTF-8 JSON bytes. The packet schema is versioned with `schema_version`.
 
 Active round payload:
 

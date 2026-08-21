@@ -7,12 +7,12 @@ import org.bukkit.entity.Player;
 
 import java.nio.charset.StandardCharsets;
 
-public final class TrainingStatePacketService {
-    public static final String CHANNEL = "yrush:training_state";
+public final class BotStatePacketService {
+    public static final String CHANNEL = "yrush:bot_state";
     private static final int SCHEMA_VERSION = 1;
     private static final Gson GSON = new Gson();
 
-    private TrainingStatePacketService() {}
+    private BotStatePacketService() {}
 
     public static void sendRoundState(
         YRushPlugin plugin,
@@ -28,7 +28,7 @@ public final class TrainingStatePacketService {
     ) {
         if (!enabled || !player.isOnline()) return;
 
-        send(plugin, player, new TrainingStatePayload(
+        send(plugin, player, new BotStatePayload(
             SCHEMA_VERSION,
             true,
             playerActive,
@@ -44,7 +44,7 @@ public final class TrainingStatePacketService {
     public static void sendInactive(YRushPlugin plugin, boolean enabled, Player player, DebugService debug) {
         if (!enabled || !player.isOnline()) return;
 
-        send(plugin, player, new TrainingStatePayload(
+        send(plugin, player, new BotStatePayload(
             SCHEMA_VERSION,
             false,
             false,
@@ -57,10 +57,10 @@ public final class TrainingStatePacketService {
         ), debug);
     }
 
-    private static void send(YRushPlugin plugin, Player player, TrainingStatePayload payload, DebugService debug) {
+    private static void send(YRushPlugin plugin, Player player, BotStatePayload payload, DebugService debug) {
         String json = GSON.toJson(payload);
         if (!player.getListeningPluginChannels().contains(CHANNEL)) {
-            debug.log("Skipped training packet. player=" + player.getName()
+            debug.log("Skipped bot packet. player=" + player.getName()
                 + " channel=" + CHANNEL
                 + " reason=client-not-listening"
                 + " payload=" + json);
@@ -69,18 +69,18 @@ public final class TrainingStatePacketService {
 
         try {
             player.sendPluginMessage(plugin, CHANNEL, json.getBytes(StandardCharsets.UTF_8));
-            debug.log("Sent training packet. player=" + player.getName()
+            debug.log("Sent bot packet. player=" + player.getName()
                 + " channel=" + CHANNEL
                 + " payload=" + json);
         } catch (RuntimeException ex) {
-            debug.log("Could not send training packet. player=" + player.getName()
+            debug.log("Could not send bot packet. player=" + player.getName()
                 + " channel=" + CHANNEL
                 + " error=" + ex.getMessage()
                 + " payload=" + json);
         }
     }
 
-    private record TrainingStatePayload(
+    private record BotStatePayload(
         int schema_version,
         boolean round_active,
         boolean player_active,

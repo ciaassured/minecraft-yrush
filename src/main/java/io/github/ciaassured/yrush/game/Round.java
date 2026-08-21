@@ -10,7 +10,7 @@ import io.github.ciaassured.yrush.location.TargetYSelector;
 import io.github.ciaassured.yrush.service.DebugService;
 import io.github.ciaassured.yrush.service.MessageService;
 import io.github.ciaassured.yrush.service.PlayerStateService;
-import io.github.ciaassured.yrush.service.TrainingStatePacketService;
+import io.github.ciaassured.yrush.service.BotStatePacketService;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -147,7 +147,7 @@ public final class Round implements Listener, AutoCloseable {
             + " mode=" + options.runMode().label()
             + " preTeleportDelayTicks=" + options.preTeleportDelayTicks()
             + " lockedCountdownTicks=" + options.lockedCountdownTicks()
-            + " trainingPacketsEnabled=" + config.trainingPacketsEnabled()
+            + " botPacketsEnabled=" + config.botPacketsEnabled()
             + " lastStartCategory=" + lastStartCategory);
         startPreparation();
     }
@@ -168,7 +168,7 @@ public final class Round implements Listener, AutoCloseable {
         disposed = true;
 
         debug("Closing round. phase=" + phase);
-        sendInactiveTrainingStateToParticipants();
+        sendInactiveBotStateToParticipants();
         HandlerList.unregisterAll(this);
         cancelAllTasks();
         offlineRestores = restorePlayers();
@@ -335,7 +335,7 @@ public final class Round implements Listener, AutoCloseable {
         debug("Players teleported and locked. players=" + players.size()
             + " waterStart=" + waterStart
             + " countdownTicks=" + options.lockedCountdownTicks());
-        sendTrainingStateToPlayers(players, Phase.LOCKED_COUNTDOWN, remainingCountdownSeconds(options.lockedCountdownTicks()));
+        sendBotStateToPlayers(players, Phase.LOCKED_COUNTDOWN, remainingCountdownSeconds(options.lockedCountdownTicks()));
         startCountdown();
     }
 
@@ -387,7 +387,7 @@ public final class Round implements Listener, AutoCloseable {
         if (options.showRoundStartMessages()) {
             MessageService.roundStart(players, context);
         }
-        sendTrainingStateToPlayers(players, Phase.ACTIVE, context.remainingSeconds(Instant.now()));
+        sendBotStateToPlayers(players, Phase.ACTIVE, context.remainingSeconds(Instant.now()));
         startActiveTasks();
     }
 
@@ -414,7 +414,7 @@ public final class Round implements Listener, AutoCloseable {
                 if (options.showActionBar()) {
                     MessageService.actionBar(player, context, activePlayers.size(), totalParticipants);
                 }
-                sendTrainingState(player, Phase.ACTIVE, activePlayers.contains(player.getUniqueId()), secondsRemaining);
+                sendBotState(player, Phase.ACTIVE, activePlayers.contains(player.getUniqueId()), secondsRemaining);
             }
         }, 20L, 20L);
 
@@ -493,7 +493,7 @@ public final class Round implements Listener, AutoCloseable {
 
         debug("Player eliminated. player=" + player.getName()
             + " activePlayers=" + activePlayers.size());
-        sendTrainingState(player, Phase.ACTIVE, false, context == null ? 0L : context.remainingSeconds(Instant.now()));
+        sendBotState(player, Phase.ACTIVE, false, context == null ? 0L : context.remainingSeconds(Instant.now()));
         if (context != null) {
             PlayerStateService.eliminateToSpectator(player, context.startCenter());
         }
@@ -604,7 +604,7 @@ public final class Round implements Listener, AutoCloseable {
             // Reconnecting eliminated player — put them back in spectator.
             Bukkit.getScheduler().runTask(plugin, () -> {
                 PlayerStateService.eliminateToSpectator(player, context.startCenter());
-                sendTrainingState(player, Phase.ACTIVE, false, context.remainingSeconds(Instant.now()));
+                sendBotState(player, Phase.ACTIVE, false, context.remainingSeconds(Instant.now()));
             });
         }
     }
@@ -634,17 +634,17 @@ public final class Round implements Listener, AutoCloseable {
         debug.log("round=" + roundId + " " + message);
     }
 
-    private void sendTrainingStateToPlayers(List<Player> players, Phase packetPhase, long secondsRemaining) {
+    private void sendBotStateToPlayers(List<Player> players, Phase packetPhase, long secondsRemaining) {
         for (Player player : players) {
-            sendTrainingState(player, packetPhase, activePlayers.contains(player.getUniqueId()), secondsRemaining);
+            sendBotState(player, packetPhase, activePlayers.contains(player.getUniqueId()), secondsRemaining);
         }
     }
 
-    private void sendTrainingState(Player player, Phase packetPhase, boolean playerActive, long secondsRemaining) {
+    private void sendBotState(Player player, Phase packetPhase, boolean playerActive, long secondsRemaining) {
         if (context == null) return;
-        TrainingStatePacketService.sendRoundState(
+        BotStatePacketService.sendRoundState(
             plugin,
-            config.trainingPacketsEnabled(),
+            config.botPacketsEnabled(),
             player,
             context,
             packetPhase.name(),
@@ -656,9 +656,9 @@ public final class Round implements Listener, AutoCloseable {
         );
     }
 
-    private void sendInactiveTrainingStateToParticipants() {
+    private void sendInactiveBotStateToParticipants() {
         for (Player player : onlineParticipants()) {
-            TrainingStatePacketService.sendInactive(plugin, config.trainingPacketsEnabled(), player, debug);
+            BotStatePacketService.sendInactive(plugin, config.botPacketsEnabled(), player, debug);
         }
     }
 

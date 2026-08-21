@@ -2,7 +2,7 @@ package io.github.ciaassured.yrush;
 
 import io.github.ciaassured.yrush.command.YRushCommand;
 import io.github.ciaassured.yrush.game.GameController;
-import io.github.ciaassured.yrush.service.TrainingStatePacketService;
+import io.github.ciaassured.yrush.service.BotStatePacketService;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -22,7 +22,7 @@ public final class YRushPlugin extends JavaPlugin {
         command.setExecutor(executor);
         command.setTabCompleter(executor);
 
-        getServer().getMessenger().registerOutgoingPluginChannel(this, TrainingStatePacketService.CHANNEL);
+        getServer().getMessenger().registerOutgoingPluginChannel(this, BotStatePacketService.CHANNEL);
 
         getServer().getPluginManager().registerEvents(gameController, this);
         getLogger().info("YRush enabled.");
@@ -33,6 +33,6 @@ public final class YRushPlugin extends JavaPlugin {
         if (gameController != null) {
             gameController.shutdown();
         }
-        getServer().getMessenger().unregisterOutgoingPluginChannel(this, TrainingStatePacketService.CHANNEL);
+        getServer().getMessenger().unregisterOutgoingPluginChannel(this, BotStatePacketService.CHANNEL);
     }
 }

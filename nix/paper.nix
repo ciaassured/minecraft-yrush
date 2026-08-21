@@ -42,7 +42,7 @@
         start-location:
           radius: 3000
 
-        training-packets:
+        bot-packets:
           enabled: true
 
         debug:
