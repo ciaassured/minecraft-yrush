@@ -21,15 +21,22 @@ Place the jar in your server's `plugins/` directory, then restart the server.
 | `/yrush status` | Show the current YRush state. |
 | `/yrush setspawn` | Set the lobby location used between rounds. If no lobby is configured, YRush uses the world's spawn location. |
 
-## Local Deployment
+## Local Development
 
-For local Paper testing, create `local.properties` from `local.properties.example`.
+| Command                | Description                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| `nix develop`          | Enter the Java 25 and Gradle development shell.                              |
+| `nix build`            | Build and test the plugin; the JAR is available under `result/share/yrush/`. |
+| `nix run .#paper`      | Build and install YRush, then run the pinned Paper 26.2 server.              |
+| `nix run .#smoke`      | Run the disposable Paper lifecycle smoke test.                               |
+| `nix fmt`              | Format the Nix sources with nixfmt.                                          |
 
-| Command | Description |
-| --- | --- |
-| `./gradlew deployPlugin` | Build the plugin and copy it to the configured Paper plugins folder. |
-| `./gradlew runPaperServer` | Start the configured local Paper server. |
-| `./gradlew deployAndRun` | Deploy the plugin, then start the configured local Paper server. |
+The Paper runner keeps local state in `.yrush-paper/`; set `YRUSH_PAPER_STATE_DIR` to override
+that location. It binds to localhost and uses offline mode with training packets and debug logging
+enabled.
+
+After changing Gradle dependencies, refresh their Nix hashes with
+`nix run .#update-gradle-deps`.
 
 ## Gameplay
 

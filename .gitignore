@@ -8,4 +8,6 @@ bin/
 *.iml
 .DS_Store
 .codex
-local.properties
+.yrush-paper/
+result
+result-*

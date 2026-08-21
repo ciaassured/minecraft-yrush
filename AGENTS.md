@@ -466,5 +466,6 @@ Possible future commands:
 - Prefer clear, recoverable behavior over surprising teleports or unsafe starts.
 - When editing, preserve unrelated user changes.
 - Before implementing against a Minecraft/Paper version, verify the currently supported Paper API version because "latest Minecraft" changes over time.
-- Local Paper dev deployment is configured through ignored `local.properties`; prefer `paperServerDir=/absolute/path/to/server` and let Gradle infer `plugins/` and the Paper jar where possible.
+- Development is Nix-first on `x86_64-linux`; use `nix develop`, `nix build`, `nix run .#paper`, and `nix run .#smoke` rather than adding a Gradle wrapper or local server properties.
+- After changing Gradle dependencies, refresh `nix/gradle-deps.json` with `nix run .#update-gradle-deps`.
 - Use Conventional Commits for commit messages, for example `feat: scaffold yrush paper plugin`.
