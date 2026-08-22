@@ -21,22 +21,6 @@ Place the jar in your server's `plugins/` directory, then restart the server.
 | `/yrush status` | Show the current YRush state. |
 | `/yrush setspawn` | Set the lobby location used between rounds. If no lobby is configured, YRush uses the world's spawn location. |
 
-## Local Development
-
-| Command           | Description                                                                  |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `nix develop`     | Enter the Java 25 and Gradle development shell.                              |
-| `nix build`       | Build and test the plugin; the JAR is available under `result/share/yrush/`. |
-| `nix run .#paper` | Run Paper with debug logging and bot packets enabled.                        |
-| `nix run .#smoke` | Run the disposable Paper lifecycle smoke test.                               |
-| `nix fmt`         | Format the Nix sources with nixfmt.                                          |
-
-The Paper runner keeps local state in `.yrush-paper/`; set `YRUSH_PAPER_STATE_DIR` to override
-that location. For a fresh state. For a fresh local sever, stop Paper and delete `.yrush-paper/` before running `nix run .#paper`.
-
-After changing Gradle dependencies, refresh their Nix hashes with
-`nix run .#update-gradle-deps`.
-
 ## Configuration
 
 YRush reads its settings from `plugins/YRush/config.yml`. On startup, it creates that file from
@@ -94,3 +78,30 @@ Inactive payload:
 | `LOCKED_COUNTDOWN` | Players are at the start but locked while the countdown runs.    |
 | `ACTIVE`           | The race is running and eligible players can move, act, and win. |
 | `INACTIVE`         | No round is active; sent after completion, stopping, or cleanup. |
+
+## Local Development
+
+| Command           | Description                                                                  |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `nix develop`     | Enter the Java 25 and Gradle development shell.                              |
+| `nix build`       | Build and test the plugin; the JAR is available under `result/share/yrush/`. |
+| `nix run .#paper` | Run Paper with debug logging and bot packets enabled.                        |
+| `nix run .#smoke` | Run the disposable Paper lifecycle smoke test.                               |
+| `nix fmt`         | Format the Nix sources with nixfmt.                                          |
+
+The Paper runner keeps local state in `.yrush-paper/`; set `YRUSH_PAPER_STATE_DIR` to override
+that location. For a fresh state. For a fresh local sever, stop Paper and delete `.yrush-paper/` before running `nix run .#paper`.
+
+After changing Gradle dependencies, refresh their Nix hashes with
+`nix run .#update-gradle-deps`.
+
+## Releasing
+
+Push a new vMAJOR.MINOR.PATCH tag to trigger the release workflow:
+
+```sh
+git tag v1.3.1
+git push origin v1.3.1
+```
+
+Do not create the GitHub release manually; the workflow creates it and uploads YRush.jar. The release asset is always named YRush.jar, providing a stable download URL for automated server updates.
