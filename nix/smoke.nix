@@ -14,7 +14,9 @@
         runtimeInputs = [
           pkgs.coreutils
           pkgs.gnugrep
+          pkgs.unzip
           pkgs.util-linux
+          pkgs.yq-go
         ];
         text = ''
           smoke_dir="$(mktemp -d -t yrush-paper-smoke.XXXXXX)"
@@ -97,6 +99,10 @@
           grep -Fq "Done (" server.log
           grep -Fq "Disabling YRush" server.log
           grep -Fq "Stopping server" server.log
+          test -f plugins/YRush/config.yml
+          unzip -p plugins/YRush.jar config.yml \
+            | yq eval '.debug.enabled = true | .["bot-packets"].enabled = true' - \
+            | cmp - plugins/YRush/config.yml
           echo "YRush Paper 26.2 smoke test passed."
         '';
       };

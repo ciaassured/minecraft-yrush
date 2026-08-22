@@ -29,25 +29,19 @@
         simulation-distance=3
       '';
 
-      pluginConfig = pkgs.writeText "yrush-config.yml" ''
-        round:
-          countdown-seconds: 5
-          between-rounds-seconds: 5
-          timeout-seconds: 600
-
-        target-y:
-          minimum-distance: 10
-          maximum-distance: 96
-
-        start-location:
-          radius: 3000
-
-        bot-packets:
-          enabled: true
-
-        debug:
-          enabled: true
-      '';
+      pluginConfig =
+        pkgs.runCommand "yrush-config.yml"
+          {
+            nativeBuildInputs = [
+              pkgs.unzip
+              pkgs.yq-go
+            ];
+          }
+          ''
+            unzip -p ${config.packages.yrush}/share/yrush/YRush.jar config.yml \
+              | yq eval '.debug.enabled = true | .["bot-packets"].enabled = true' - \
+              > "$out"
+          '';
 
       paper = pkgs.writeShellApplication {
         name = "yrush-paper";
