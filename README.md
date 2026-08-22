@@ -52,8 +52,7 @@ are not replaced. Restart the server after editing the configuration.
 
 ## Bot State Packets
 
-YRush can send round state to bot clients over a Paper plugin messaging channel.
-All run modes—single, auto, and training—emit these packets when they are enabled.
+YRush can send round information to bot clients over a Paper plugin messaging channel.
 
 Enable it in `config.yml`:
 
