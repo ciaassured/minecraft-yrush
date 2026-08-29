@@ -5,7 +5,7 @@ plugins {
 group = "io.github.ciaassured"
 version = providers.gradleProperty("yrushVersion").getOrElse("0.0.0-dev")
 
-val paperApiVersion = "26.2.build.112-stable"
+val paperApiVersion = "26.2.build.119-stable"
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:$paperApiVersion")
