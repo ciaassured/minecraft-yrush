@@ -67,17 +67,28 @@ Eliminated player payload:
 {"schema_version":1,"round_active":true,"player_active":false,"phase":"ACTIVE","direction":"DOWN","target_y":39,"active_players":2,"total_players":5,"seconds_remaining":421}
 ```
 
+Completed round payload:
+
+```json
+{"schema_version":1,"round_active":false,"player_active":false,"phase":"ROUND_COMPLETE","result":"WIN","player_outcome":"WON","winner_uuid":"12345678-1234-5678-9abc-123456789abc"}
+```
+
+`result` is `WIN`, `DRAW`, or `STOPPED`. `player_outcome` describes the result for the receiving
+player and is `WON`, `LOST`, `ELIMINATED`, `DRAW`, or `STOPPED`. `winner_uuid` is present only for
+a win.
+
 Inactive payload:
 
 ```json
 {"schema_version":1,"round_active":false,"player_active":false,"phase":"INACTIVE"}
 ```
 
-| Phase              | Description                                                      |
-|--------------------|------------------------------------------------------------------|
-| `LOCKED_COUNTDOWN` | Players are at the start but locked while the countdown runs.    |
-| `ACTIVE`           | The race is running and eligible players can move, act, and win. |
-| `INACTIVE`         | No round is active; sent after completion, stopping, or cleanup. |
+| Phase              | Description                                                               |
+|--------------------|---------------------------------------------------------------------------|
+| `LOCKED_COUNTDOWN` | Players are at the start but locked while the countdown runs.             |
+| `ACTIVE`           | The race is running and eligible players can move, act, and win.          |
+| `ROUND_COMPLETE`   | The terminal result for this player; immediately followed by `INACTIVE`.  |
+| `INACTIVE`         | No round is active; sent after completion, stopping, or cleanup.          |
 
 ## Local Development
 

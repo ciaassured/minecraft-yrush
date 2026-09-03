@@ -3,6 +3,7 @@ package io.github.ciaassured.yrush.service;
 import com.google.gson.Gson;
 import io.github.ciaassured.yrush.YRushPlugin;
 import io.github.ciaassured.yrush.game.RoundContext;
+import io.github.ciaassured.yrush.game.RoundResult;
 import org.bukkit.entity.Player;
 
 import java.nio.charset.StandardCharsets;
@@ -44,7 +45,34 @@ public final class BotStatePacketService {
     public static void sendInactive(YRushPlugin plugin, boolean enabled, Player player, DebugService debug) {
         if (!enabled || !player.isOnline()) return;
 
-        send(plugin, player, new BotStatePayload(
+        send(plugin, player, inactivePayload(), debug);
+    }
+
+    /** Sends one round-completion payload followed immediately by the inactive state. */
+    public static void sendRoundCompleteAndInactive(
+        YRushPlugin plugin,
+        boolean enabled,
+        Player player,
+        RoundResult result,
+        RoundResult.PlayerOutcome playerOutcome,
+        DebugService debug
+    ) {
+        if (!enabled || !player.isOnline()) return;
+
+        send(plugin, player, new BotRoundCompletePayload(
+            SCHEMA_VERSION,
+            false,
+            false,
+            "ROUND_COMPLETE",
+            result.type().name(),
+            playerOutcome.name(),
+            result.winnerId().map(winnerId -> winnerId.toString()).orElse(null)
+        ), debug);
+        send(plugin, player, inactivePayload(), debug);
+    }
+
+    private static BotStatePayload inactivePayload() {
+        return new BotStatePayload(
             SCHEMA_VERSION,
             false,
             false,
@@ -54,10 +82,10 @@ public final class BotStatePacketService {
             null,
             null,
             null
-        ), debug);
+        );
     }
 
-    private static void send(YRushPlugin plugin, Player player, BotStatePayload payload, DebugService debug) {
+    private static void send(YRushPlugin plugin, Player player, Object payload, DebugService debug) {
         String json = GSON.toJson(payload);
         if (!player.getListeningPluginChannels().contains(CHANNEL)) {
             debug.log("Skipped bot packet. player=" + player.getName()
@@ -90,5 +118,15 @@ public final class BotStatePacketService {
         Integer active_players,
         Integer total_players,
         Long seconds_remaining
+    ) {}
+
+    private record BotRoundCompletePayload(
+        int schema_version,
+        boolean round_active,
+        boolean player_active,
+        String phase,
+        String result,
+        String player_outcome,
+        String winner_uuid
     ) {}
 }

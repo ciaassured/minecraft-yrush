@@ -50,12 +50,11 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Owns the entire lifecycle of a single round: preparation, countdown, active play, and cleanup.
- * Registers itself as a Bukkit listener on construction and unregisters on close.
+ * Registers itself as a Bukkit listener on construction and unregisters when the round ends.
  * All round state lives here; nothing leaks to GameController.
  *
  * <p>Implements {@link AutoCloseable}: calling {@link #close()} is always safe, idempotent,
- * and performs full cleanup. After closing, call {@link #drainOfflineRestores()} to retrieve
- * the original game modes for any players who were offline at cleanup time.
+ * and completes the round with a stopped result before performing full cleanup.
  */
 public final class Round implements Listener, AutoCloseable {
     private static final int MAX_PREPARATION_ATTEMPTS = 20;
@@ -100,7 +99,7 @@ public final class Round implements Listener, AutoCloseable {
     // Guards against double-close and stale async callbacks.
     private boolean disposed = false;
 
-    // Populated by close(); drained by drainOfflineRestores().
+    // Populated during termination; drained by the completion handler.
     private Map<UUID, GameMode> offlineRestores;
 
     Round(
@@ -155,29 +154,17 @@ public final class Round implements Listener, AutoCloseable {
     // ── External API ────────────────────────────────────────────────────────
 
     /**
-     * Cancels this round and releases all resources: unregisters events, cancels tasks,
-     * and restores all participants to their pre-game state. Idempotent — safe to call
-     * multiple times or from any code path (stop command, plugin disable, or round end).
-     *
-     * <p>After calling close(), call {@link #drainOfflineRestores()} to retrieve original
-     * game modes for players who were offline and could not be restored immediately.
+     * Stops this round, publishes its terminal state, releases all resources, and invokes the
+     * completion handler. Idempotent — safe to call multiple times or from any cancellation path.
      */
     @Override
     public void close() {
-        if (disposed) return;
-        disposed = true;
-
-        debug("Closing round. phase=" + phase);
-        sendInactiveBotStateToParticipants();
-        HandlerList.unregisterAll(this);
-        cancelAllTasks();
-        offlineRestores = restorePlayers();
-        debug("Round closed. offlineRestores=" + offlineRestores.size());
+        finishRound(RoundResultType.STOPPED, null);
     }
 
     /**
-     * Returns the offline-player restore map populated by the most recent {@link #close()} call,
-     * then clears it. Returns an empty map if close() has not been called or was already drained.
+     * Returns the offline-player restore map populated during termination, then clears it.
+     * Returns an empty map if termination has not completed or the map was already drained.
      */
     Map<UUID, GameMode> drainOfflineRestores() {
         Map<UUID, GameMode> result = offlineRestores != null ? offlineRestores : Map.of();
@@ -482,7 +469,9 @@ public final class Round implements Listener, AutoCloseable {
             + " winner=" + (winner == null ? "none" : winner.getName())
             + " duration=" + duration
             + " activePlayers=" + activePlayers.size());
-        close();
+        disposed = true;
+        sendRoundCompleteBotStateToParticipants(result);
+        dispose();
         onComplete.onComplete(result, drainOfflineRestores(), categoryUsed);
     }
 
@@ -656,10 +645,26 @@ public final class Round implements Listener, AutoCloseable {
         );
     }
 
-    private void sendInactiveBotStateToParticipants() {
+    private void sendRoundCompleteBotStateToParticipants(RoundResult result) {
         for (Player player : onlineParticipants()) {
-            BotStatePacketService.sendInactive(plugin, config.botPacketsEnabled(), player, debug);
+            UUID playerId = player.getUniqueId();
+            BotStatePacketService.sendRoundCompleteAndInactive(
+                plugin,
+                config.botPacketsEnabled(),
+                player,
+                result,
+                result.outcomeFor(playerId, eliminatedPlayers.contains(playerId)),
+                debug
+            );
         }
+    }
+
+    private void dispose() {
+        debug("Closing round. phase=" + phase);
+        HandlerList.unregisterAll(this);
+        cancelAllTasks();
+        offlineRestores = restorePlayers();
+        debug("Round closed. offlineRestores=" + offlineRestores.size());
     }
 
     private int remainingCountdownSeconds(int ticksRemaining) {

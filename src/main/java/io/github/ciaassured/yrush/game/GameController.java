@@ -69,11 +69,6 @@ public final class GameController implements Listener {
         if (currentRound != null) {
             debug.log("Stopping active round.");
             currentRound.close();
-            Map<UUID, GameMode> offlineRestores = currentRound.drainOfflineRestores();
-            debug.log("Stop queued offline restores=" + offlineRestores.size());
-            pendingRestores.putAll(offlineRestores);
-            currentRound = null;
-            lastResult = RoundResult.stopped();
         }
         MessageService.broadcast("YRush stopped.");
     }
