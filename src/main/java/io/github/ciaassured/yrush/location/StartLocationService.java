@@ -20,7 +20,10 @@ import java.util.concurrent.CompletableFuture;
 public final class StartLocationService {
     private static final int MAX_LOCATION_ATTEMPTS = 150;
     private static final int MAX_RECENT_CATEGORY_AVOID_ATTEMPTS = 10;
-    private static final int PLAYER_SPREAD_RADIUS = 4;
+    // A 15x15 grid accommodates the server's 128-player limit with enough spare candidates
+    // for uneven but otherwise safe terrain. Its candidate feet positions stay inside the
+    // sampled chunk because randomColumn selects that chunk's centre block.
+    static final int PLAYER_SPREAD_RADIUS = 7;
     private static final int PRELOAD_CHUNK_RADIUS = 1;
     private static final int SURFACE_START_PERCENT = 70;
     private static final boolean GENERATE_MISSING_CHUNKS = true;
@@ -144,7 +147,7 @@ public final class StartLocationService {
         return Optional.empty();
     }
 
-    private List<Location> findPlayerPositions(Location center, int playerCount) {
+    List<Location> findPlayerPositions(Location center, int playerCount) {
         World world = center.getWorld();
         if (world == null) return List.of();
 
